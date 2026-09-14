@@ -1,0 +1,11 @@
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.get("/health")
+def health_check() -> dict:
+    return {"status": "ok"}
+
+@router.post("/predict")
+def predict() -> dict:
+    return {"prediction": "low"}
