@@ -76,17 +76,12 @@ def avaliar(
 ) -> dict:
     """Avalia no conjunto de teste e retorna métricas em dict."""
     X_teste = vetorizador.transform(test_df["medical_abstract"])
-    y_teste = test_df["condition_label"]
+    y_teste = test_df["condition_label"].map(label_map)
     y_pred = modelo.predict(X_teste)
 
     acc = accuracy_score(y_teste, y_pred)
     f1_macro = f1_score(y_teste, y_pred, average="macro")
-    report = classification_report(
-        y_teste,
-        y_pred,
-        target_names=[label_map[k] for k in sorted(label_map)],
-        output_dict=True,
-    )
+    report = classification_report(y_teste, y_pred, output_dict=True)
     return {
         "accuracy": acc,
         "f1_macro": f1_macro,
@@ -121,7 +116,8 @@ if __name__ == "__main__":
     print(f"Vocabulário: {len(vetorizador.vocabulary_)} termos")
 
     print("Treinando RandomForestClassifier...")
-    modelo = treinar_classificador(X_treino, train_df["condition_label"])
+    y_treino = train_df["condition_label"].map(label_map)
+    modelo = treinar_classificador(X_treino, y_treino)
 
     print("Avaliando no conjunto de teste...")
     metricas = avaliar(modelo, vetorizador, test_df, label_map)
