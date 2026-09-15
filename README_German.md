@@ -22,7 +22,7 @@ Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo
 | cardiovascular diseases | 610 |
 | general pathological conditions | 961 |
 
-### TF-IDF + Random Forest: voltas que dei até chegar num resultado razoável:**
+### TF-IDF + Random Forest: voltas que dei até chegar num resultado razoável:
 
 1. **Tamanho do arquivo estourou.** Primeira tentativa (`max_features=20000`, bigramas, `RandomForestClassifier(n_estimators=300, max_depth=None)`) gerou um `.joblib` de **217 MB** — acima do limite de 100MB do GitHub, o push ia falhar. Cortei pra `max_features=10000`, só unigramas, `n_estimators=200`, `max_depth=25`, `min_samples_leaf=2`. Ficou em ~17MB.
 2. **Desbalanceamento mascarando o resultado.** Com hiperparâmetros mais curtos, o accuracy subiu (0.49) mas o F1-macro caiu pra 0.38 — o modelo estava só chutando a classe majoritária (`general pathological conditions`, 961 de 2888). Adicionei `class_weight="balanced"` e o F1-macro subiu pra **0.54** sem crescer o arquivo.
