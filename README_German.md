@@ -83,4 +83,4 @@ uv sync --group training
 uv run python training/train_tfidf_rf.py
 ```
 
-Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã de `tech-challenge-03/` (mesmo nível), com os 3 CSVs dentro.
+Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã da tua pasta local (mesmo nível), com os 3 CSVs dentro.
