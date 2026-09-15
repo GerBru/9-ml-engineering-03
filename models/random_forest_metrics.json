@@ -1,0 +1,51 @@
+{
+  "accuracy": 0.5491689750692521,
+  "f1_macro": 0.5412862332044723,
+  "classification_report": {
+    "neoplasms": {
+      "precision": 0.6593707250341997,
+      "recall": 0.7614533965244866,
+      "f1-score": 0.7067448680351907,
+      "support": 633.0
+    },
+    "digestive system diseases": {
+      "precision": 0.4444444444444444,
+      "recall": 0.6956521739130435,
+      "f1-score": 0.5423728813559322,
+      "support": 299.0
+    },
+    "nervous system diseases": {
+      "precision": 0.42424242424242425,
+      "recall": 0.7272727272727273,
+      "f1-score": 0.5358851674641149,
+      "support": 385.0
+    },
+    "cardiovascular diseases": {
+      "precision": 0.6217277486910995,
+      "recall": 0.7786885245901639,
+      "f1-score": 0.6914119359534207,
+      "support": 610.0
+    },
+    "general pathological conditions": {
+      "precision": 0.5320754716981132,
+      "recall": 0.14672216441207075,
+      "f1-score": 0.2300163132137031,
+      "support": 961.0
+    },
+    "accuracy": 0.5491689750692521,
+    "macro avg": {
+      "precision": 0.5363721628220561,
+      "recall": 0.6219577973424983,
+      "f1-score": 0.5412862332044723,
+      "support": 2888.0
+    },
+    "weighted avg": {
+      "precision": 0.5554648013062078,
+      "recall": 0.5491689750692521,
+      "f1-score": 0.5050767799152835,
+      "support": 2888.0
+    }
+  },
+  "n_treino": 11550,
+  "n_teste": 2888
+}

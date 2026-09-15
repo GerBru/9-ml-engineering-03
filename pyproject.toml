@@ -7,13 +7,16 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
     "joblib>=1.6.0",
-    "scikit-learn>=1.9.1",
+    "scikit-learn>=1.9.0",
     "uvicorn>=0.52.4",
 ]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.16.7",
+    "ruff>=0.16.5",
+]
+training = [
+    "pandas>=3.0.5",
 ]
 
 [build-system]
