@@ -22,3 +22,14 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/medical_triage"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+# E = erros de estilo (espaços, indentação)
+# F = pyflakes (import não usado, variável indefinida)
+# I = isort (ordem dos imports)
+# B = bugbear (armadilhas comuns)
