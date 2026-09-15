@@ -28,7 +28,7 @@ Comecei a treinar em cima do dataset de verdade, não mais nas 15 frases sintét
 
 ### TF-IDF + Random Forest — sem Pipeline ainda
 
-Por pedido explícito nesta etapa: vetorizador e classificador ficam **separados**, cada um serializado no seu próprio `.joblib`. Ainda não empacotei em `sklearn.pipeline.Pipeline` — isso fica pra depois, quando eu (ou a gente) decidir a interface final de inferência. Por isso este modelo **não substitui** o `models/classifier.joblib` que a API usa hoje; são artefatos novos, lado a lado.
+Por pedido explícito nesta etapa: vetorizador e classificador ficam **separados**, cada um serializado no seu próprio `.joblib`. Empacotamento em `sklearn.pipeline.Pipeline` ficou pra uma segunda etapa (ver abaixo). Este modelo **não substitui** o `models/classifier.joblib` que a API usa hoje; são artefatos novos, lado a lado — ainda não decidimos trocar (ver "Aberto").
 
 - `training/train_tfidf_rf.py`
 - `models/tfidf_vectorizer.joblib` (~373 KB)
@@ -61,6 +61,32 @@ uv run python training/train_tfidf_rf.py
 
 **Limitação que já vi e ainda não resolvi:** o `class_weight="balanced"` super-corrigiu pra classe majoritária — o recall dela despencou pra 0.15 (o modelo praticamente parou de prever essa classe pra acertar mais as minoritárias). Compensa no F1-macro agregado, mas não é um resultado equilibrado de verdade. Próxima iteração: testar `class_weight="balanced_subsample"`, threshold por classe, ou balancear via oversampling/undersampling antes do TF-IDF.
 
+### Empacotando num Pipeline (pro Fellipe não precisar mudar nada)
+
+Perguntei pro Fellipe se o jeito atual (dois `.joblib` separados) ia dar pra ele continuar a parte dele do mesmo jeito que fazia com o `classifier.joblib`. Resposta: **não direto**. O `sklearn_predictor.py` dele faz `joblib.load(path).predict([texto])[0]` esperando um `Pipeline` único — se carregasse só o classificador, ia quebrar (`RandomForestClassifier.predict` espera a matriz TF-IDF já vetorizada, não texto cru); se carregasse só o vetorizador, nem tem `.predict()`.
+
+Enquanto validava isso, achei um bug melhor resolver agora do que depois: eu tinha treinado o classificador com `condition_label` (o **código numérico**, 1 a 5), não com o nome da classe. Isso não ia quebrar (`RandomForestClassifier` treina normal com int como target), mas o `PredictResponse.label` da API é tipado como `str` — a predição ia sair como `"3"` em vez de `"nervous system diseases"`, tecnicamente "funcionando" mas com o significado errado. Corrigi o `train_tfidf_rf.py` pra treinar com `condition_label.map(label_map)` (a string do `medical_tc_labels.csv`), retreinei (métricas idênticas — é só relabeling) e conferi:
+
+```python
+pipeline.predict(["patient with cardiac chest pain and heart failure"])[0]
+# 'cardiovascular diseases' (str)
+```
+
+Criei `training/build_pipeline.py` — não retreina nada, só carrega os dois `.joblib` já ajustados e monta:
+
+```python
+Pipeline([("tfidf", vetorizador), ("clf", modelo)])
+```
+
+- `training/build_pipeline.py`
+- `models/random_forest_pipeline.joblib` (~18.1 MB)
+
+```bash
+uv run python training/build_pipeline.py
+```
+
+Continua **sem substituir** `models/classifier.joblib` — deixei os três arquivos lado a lado (`tfidf_vectorizer.joblib`, `random_forest_classifier.joblib` e agora `random_forest_pipeline.joblib`) até decidirmos junto quando fazer a troca de fato.
+
 ### Ajuste no ambiente (bloqueava qualquer `uv sync`)
 
 Pra instalar o `pandas` (grupo de dependência novo, `training`, só pra scripts de treino — não vai pra API), esbarrei em dois pins impossíveis que já estavam no `pyproject.toml`: `scikit-learn>=1.9.1` e `ruff>=0.16.7`. O índice interno da MELI (`pypi.artifacts.furycloud.io`) só tem até `scikit-learn==1.9.0` e `ruff==0.16.5` — ou seja, **ninguém** conseguia rodar `uv sync`/`uv add` nesse projeto antes desse fix, não é coisa que eu quebrei agora. Baixei os dois pins pro que existe de fato:
@@ -85,7 +111,6 @@ Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã de `tech-challenge
 
 ## Aberto
 
-1. Empacotar `tfidf_vectorizer.joblib` + `random_forest_classifier.joblib` num `Pipeline` único
-2. Resolver o recall baixo de `general pathological conditions` (classe majoritária sendo penalizada demais pelo balanceamento)
-3. Decidir se este modelo troca o `models/classifier.joblib` da API ou se convive com ele até comparar os dois
-4. Rodar `ruff` nos scripts novos de treino
+1. Resolver o recall baixo de `general pathological conditions` (classe majoritária sendo penalizada demais pelo balanceamento)
+2. Decidir, com o Fellipe, se `random_forest_pipeline.joblib` troca o `models/classifier.joblib` da API ou se convive com ele até compararmos os dois lado a lado
+3. ~~Rodar `ruff` nos scripts novos de treino~~ — feito, `ruff check training/` passa limpo
