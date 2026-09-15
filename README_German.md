@@ -87,6 +87,25 @@ uv run python training/build_pipeline.py
 
 Continua **sem substituir** `models/classifier.joblib` — deixei os três arquivos lado a lado (`tfidf_vectorizer.joblib`, `random_forest_classifier.joblib` e agora `random_forest_pipeline.joblib`) até decidirmos junto quando fazer a troca de fato.
 
+### Removendo os artefatos intermediários — pipeline pronto pro Fé usar
+
+Decisão tomada: o `random_forest_pipeline.joblib` já contém o vetorizador e o classificador encadeados, então `tfidf_vectorizer.joblib` e `random_forest_classifier.joblib` não precisam mais ficar no repo — eram só o material bruto que o `build_pipeline.py` consumiu pra montar o pipeline final. Removi os dois (17MB + 373KB a menos no repo). Se precisar retreinar do zero por qualquer motivo, o dataset `Medical_Abstracts_TC_Corpus/` continua guardado fora do repo, então nada se perde.
+
+**Fica assim, em `models/`:**
+- `random_forest_pipeline.joblib` (~18.1 MB) — o novo, pronto pra API
+- `classifier.joblib` — o do Fé, inalterado
+- `random_forest_metrics.json` — métricas do treino, inalterado
+
+**Pro Fellipe:** dá pra trocar pro `random_forest_pipeline.joblib` com a mesma simplicidade de hoje. Em `sklearn_predictor.py`, é só mudar o `MODEL_PATH`:
+
+```python
+MODEL_PATH = Path("models/classifier.joblib")
+# vira
+MODEL_PATH = Path("models/random_forest_pipeline.joblib")
+```
+
+Nada mais muda no arquivo — o objeto carregado já é um `Pipeline` completo (`.predict([texto])[0]` retorna string, igual ao contrato atual). Não mexi no `classifier.joblib` nem no `sklearn_predictor.py`: a troca fica a critério do Fé, no tempo dele.
+
 ### Ajuste no ambiente (bloqueava qualquer `uv sync`)
 
 Pra instalar o `pandas` (grupo de dependência novo, `training`, só pra scripts de treino — não vai pra API), esbarrei em dois pins impossíveis que já estavam no `pyproject.toml`: `scikit-learn>=1.9.1` e `ruff>=0.16.7`. O índice interno da MELI (`pypi.artifacts.furycloud.io`) só tem até `scikit-learn==1.9.0` e `ruff==0.16.5` — ou seja, **ninguém** conseguia rodar `uv sync`/`uv add` nesse projeto antes desse fix, não é coisa que eu quebrei agora. Baixei os dois pins pro que existe de fato:
@@ -112,5 +131,5 @@ Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã de `tech-challenge
 ## Aberto
 
 1. Resolver o recall baixo de `general pathological conditions` (classe majoritária sendo penalizada demais pelo balanceamento)
-2. Decidir, com o Fellipe, se `random_forest_pipeline.joblib` troca o `models/classifier.joblib` da API ou se convive com ele até compararmos os dois lado a lado
+2. ~~Decidir, com o Fellipe, se `random_forest_pipeline.joblib` troca o `models/classifier.joblib` da API~~ — decidido: o pipeline fica disponível, a troca do `MODEL_PATH` em `sklearn_predictor.py` fica com o Fé
 3. ~~Rodar `ruff` nos scripts novos de treino~~ — feito, `ruff check training/` passa limpo
