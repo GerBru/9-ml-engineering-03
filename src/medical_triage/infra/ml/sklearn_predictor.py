@@ -8,7 +8,7 @@ from medical_triage.application.exceptions import ModelNotLoadedError
 
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = Path("models/classifier.joblib")
+MODEL_PATH = Path("models/random_forest_pipeline.joblib")
 _model: Pipeline | None = None
 
 
