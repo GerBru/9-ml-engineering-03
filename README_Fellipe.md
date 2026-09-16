@@ -181,7 +181,7 @@ Esse número é o baseline sklearn.
 
 Stack: **pytest** + **httpx2** + `fastapi.testclient.TestClient`, no grupo `dev` (`uv add pytest httpx2 --dev`). Produção não leva isso (`uv sync --no-dev` no Docker).
 
-O `TestClient` não sobe servidor HTTP. Ele chama a app ASGI em memória (`async(scope, receive, send)`). O `lifespan` (startup/shutdown) roda dentro do `with TestClient(app) as c:`.
+O `TestClient` não sobe servidor HTTP. Ele chama a app ASGI[^1] em memória (`async(scope, receive, send)`). O `lifespan` (startup/shutdown) roda dentro do `with TestClient(app) as c:`.
 
 Em vez de depender do `.joblib` real, uso `app.dependency_overrides`: o FastAPI troca `get_model()` por um `MagicMock` que devolve `["cardiovascular"]` sem invocar o sklearn.
 
@@ -221,3 +221,4 @@ uv run pytest tests/test_api.py -v
 2. CI/CD GitHub Actions (lint + pytest a cada push)
 3. Monitoramento Prometheus + Grafana (docker-compose)
 
+[^1]: **Aclaración:** Una aplicación ASGI (por sus siglas en inglés, Asynchronous Server Gateway Interface) es un estándar y objeto ejecutable en Python que permite la comunicación asíncrona entre un servidor web y una aplicación o framework.
