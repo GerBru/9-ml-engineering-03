@@ -136,10 +136,88 @@ curl -X POST http://localhost:8000/predict \
   -d '{"text": "patient with cardiac chest pain and heart failure"}'
 ```
 
+
+
+## 15/09/2026
+
+Três entregas: Docker, medição de latência baseline e testes da API. Os testes vieram **antes** do CI/CD de propósito — o GitHub Actions vai rodá-los a cada push, então o pipeline precisa ter o que validar.
+
+### Docker
+
+`Dockerfile` na raiz, imagem `python:3.12-slim` (não Alpine: numpy/sklearn precisam de glibc). Instala com `uv sync --frozen --no-dev`: o lockfile trava as versões e o `--no-dev` deixa pytest/ruff/httpx2 fora da imagem de produção.
+
+Camadas na ordem do que muda menos: `pyproject.toml` + `uv.lock` primeiro, depois `src/` e `models/`. Se só o código mudar, o Docker reusa o cache da instalação.
+
+O predictor passou a apontar para o teu pipeline combinado (`models/random_forest_pipeline.joblib`). O `scikit-learn` ficou pinado em `==1.9.0` — joblib quebra se a versão do treino e da API divergirem. O `uv.lock` foi regenerado no PyPI público (saiu do índice interno) para o `docker build` funcionar em qualquer máquina.
+
+Build e subida:
+
+```bash
+docker build -t medical-triage .
+docker run --rm -p 8000:8000 medical-triage
+```
+
+A API fica em `http://localhost:8000`. Docs: `http://localhost:8000/docs`.
+
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"text": "patient with cardiac chest pain and heart failure"}'
+```
+
+
+
+### Latência baseline
+
+`scripts/benchmark.sh` dispara 10 POSTs em `/predict` via `curl` e imprime média, mínimo e máximo. O container precisa estar no ar.
+
+```bash
+./scripts/benchmark.sh
+```
+
+Esse número é o baseline sklearn.
+
+### Testes pytest
+
+Stack: **pytest** + **httpx2** + `fastapi.testclient.TestClient`, no grupo `dev` (`uv add pytest httpx2 --dev`). Produção não leva isso (`uv sync --no-dev` no Docker).
+
+O `TestClient` não sobe servidor HTTP. Ele chama a app ASGI em memória (`async(scope, receive, send)`). O `lifespan` (startup/shutdown) roda dentro do `with TestClient(app) as c:`.
+
+Em vez de depender do `.joblib` real, uso `app.dependency_overrides`: o FastAPI troca `get_model()` por um `MagicMock` que devolve `["cardiovascular"]` sem invocar o sklearn.
+
+A fixture `@pytest.fixture` com `yield` centraliza setup/teardown — configura o override, entrega o client, e limpa `dependency_overrides` no final (mesmo se o teste falhar).
+
+Arquivo: `tests/test_api.py`. Cenários:
+
+
+| Caso                                     | Esperado                        |
+| ---------------------------------------- | ------------------------------- |
+| `GET /health`                            | 200 e `{"status": "ok"}`        |
+| `POST /predict` com payload válido       | 200 e campo `label`             |
+| `POST /predict` sem o campo `text`       | 422 (validação Pydantic)        |
+| `POST /predict` com modelo não carregado | 503 (proteção do `get_model()`) |
+
+
+São 6 funções de teste cobrindo esses casos. Warnings do `httpx` antigo resolvidos migrando para `httpx2`.
+
+Para rodar:
+
+```bash
+uv sync --group dev
+uv run pytest
+```
+
+Só os testes da API:
+
+```bash
+uv run pytest tests/test_api.py -v
+```
+
+
+
 ## Aberto
 
-1. Docker + medição de latência (baseline)
-2. Texto da decisão de nuvem no README oficial
-3. Testes pytest da API
-4. Trocar o `.joblib` sintético pelo modelo que você treinar
+1. Texto da decisão de nuvem no README oficial
+2. CI/CD GitHub Actions (lint + pytest a cada push)
+3. Monitoramento Prometheus + Grafana (docker-compose)
 
