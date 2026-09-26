@@ -313,3 +313,5 @@ Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã da tua pasta local
 ### Nota de segurança: PAT exposto, push bloqueado
 
 A URL do `origin` estava com um token do GitHub embutido em texto puro (salvo sem criptografia em `.git/config`); achei também outro token solto num `github_pat.txt` fora de qualquer repositório. Tirei o token da URL do remote, mas isso quer dizer que **o push vai falhar** até eu gerar um PAT novo e autenticar de novo. Pendência: revogar os dois tokens antigos no GitHub e gerar um novo antes do próximo push.
+
+
