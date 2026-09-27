@@ -385,3 +385,46 @@ uv run pytest --cov=training --cov=src/medical_triage --cov-report=term-missing
 ```
 
 Resultado da primeira medição: **83% de cobertura total**, 17/17 testes passando. `training/ingest.py`, `validate.py`, `train.py`, `evaluate.py` em 100%; `pipeline.py` em 97%; `train_baseline.py` (script do Fellipe, não testado por ninguém) em 0% — esperado, ninguém importa esse arquivo em teste nenhum.
+
+---
+
+## 27/09/2026 - German
+
+### DVC pra versionar o dataset
+
+Branch separada: `feature/dvc-dataset-gdrive` (não fizemos direto na `develop` dessa vez).
+
+O `training/ingest.py` lia o Medical Abstracts TC Corpus de uma pasta **fora do repo** — funcionava na minha máquina, mas quebrava pra qualquer outra pessoa que clonasse do zero. Resolvi com DVC + Google Drive como remote, mesmo padrão que a gente já usava na Fase 2.
+
+**O que fiz:**
+
+1. `uv add --group training "dvc[gdrive]"` — adiciona o DVC com suporte a Google Drive.
+2. `dvc init` — cria `.dvc/config` e `.dvc/.gitignore`.
+3. `dvc remote add -d gdrive_storage gdrive://17OqAGPyzgOxeQql4clhwiZanTweB9glT` — aponta pro Drive que compartilhei com o Fé (edição).
+4. Copiei os 3 CSVs pra dentro do repo, em `data/raw/`, e rodei `dvc add` neles — isso cria um `.dvc` (ponteiro leve, com hash) pra cada um e um `.gitignore` que impede o CSV pesado de ir pro Git.
+5. Atualizei `training/ingest.py`: `DATA_DIR` agora aponta pra `data/raw/` dentro do repo, não mais pra pasta externa.
+6. Rodei o pipeline e os 17 testes de novo — mesmas métricas de sempre (accuracy 0.5492, F1-macro 0.5413), confirma que a troca de caminho não quebrou nada.
+
+**Bug no meio do caminho:** `dvc push` falhava com `module 'lib' has no attribute 'GEN_EMAIL'` — incompatibilidade entre `pyopenssl==22.0.0` (puxado como dependência antiga do `dvc[gdrive]`) e `cryptography==50.0.1` (versão nova, exigida por outra coisa na árvore de dependências). Resolvi forçando `pyopenssl>=25.0.0` (`uv add --group training "pyopenssl>=25.0.0"` → resolveu pra `26.4.0`).
+
+**Bloqueio no meu lado:** o acesso ao DVC/Google Drive está bloqueado pela política de rede da empresa nesta máquina. Já abri chamado de liberação, mas vai demorar.
+
+### Pro Fellipe: como subir os 3 arquivos pro Drive
+
+Como meu acesso está bloqueado, combinamos que **você** faz o primeiro `dvc push`, direto da sua máquina (já te dei acesso de edição na pasta do Drive). **Importante: não dá pra simplesmente arrastar os CSVs pro Drive pelo navegador** — o DVC guarda o conteúdo lá organizado por hash, não como arquivo com nome normal. Precisa ser pelo comando mesmo.
+
+Passo a passo:
+
+1. Eu te mando os 3 arquivos por fora do Git (Slack/AirDrop/o que for) — eles nunca foram commitados, estão no `.gitignore` do DVC:
+   - `medical_tc_labels.csv`
+   - `medical_tc_test.csv`
+   - `medical_tc_train.csv`
+2. Depois de puxar a `develop` (já com esse PR mergeado), coloca os 3 arquivos exatamente em `data/raw/`, respeitando esses nomes.
+3. Roda:
+   ```bash
+   uv sync --group training
+   uv run dvc push
+   ```
+   Como o conteúdo é idêntico byte a byte ao que já está nos `.dvc` commitados, o hash bate automaticamente — o DVC reconhece sem conflito e sobe pro remote `gdrive_storage`. Na primeira vez deve abrir uma autenticação OAuth pelo navegador, com a tua conta Google (a mesma que tem acesso de edição na pasta).
+
+Depois disso, qualquer um (eu incluso, quando o TI liberar) consegue rodar `dvc pull` e recuperar os dados normalmente.
