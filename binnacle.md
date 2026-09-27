@@ -314,6 +314,8 @@ Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã da tua pasta local
 
 A URL do `origin` estava com um token do GitHub embutido em texto puro (salvo sem criptografia em `.git/config`); achei também outro token solto num `github_pat.txt` fora de qualquer repositório. Tirei o token da URL do remote, mas isso quer dizer que **o push vai falhar** até eu gerar um PAT novo e autenticar de novo. Pendência: revogar os dois tokens antigos no GitHub e gerar um novo antes do próximo push.
 
+
+
 ---
 
 ## 26/09/2026 - German
@@ -362,6 +364,8 @@ Os dois eram pins/resoluções impossíveis pré-existentes que travavam `uv syn
 
 Também adicionei `[tool.pytest.ini_options] pythonpath = ["."]` — necessário pra `from training.ingest import ...` funcionar nos testes.
 
+
+
 ---
 
 ## 27/09/2026 - German
@@ -386,6 +390,8 @@ uv run pytest --cov=training --cov=src/medical_triage --cov-report=term-missing
 
 Resultado da primeira medição: **83% de cobertura total**, 17/17 testes passando. `training/ingest.py`, `validate.py`, `train.py`, `evaluate.py` em 100%; `pipeline.py` em 97%; `train_baseline.py` (script do Fellipe, não testado por ninguém) em 0% — esperado, ninguém importa esse arquivo em teste nenhum.
 
+
+
 ---
 
 ## 27/09/2026 - German
@@ -405,8 +411,6 @@ O `training/ingest.py` lia o Medical Abstracts TC Corpus de uma pasta **fora do 
 5. Atualizei `training/ingest.py`: `DATA_DIR` agora aponta pra `data/raw/` dentro do repo, não mais pra pasta externa.
 6. Rodei o pipeline e os 17 testes de novo — mesmas métricas de sempre (accuracy 0.5492, F1-macro 0.5413), confirma que a troca de caminho não quebrou nada.
 
-**Bug no meio do caminho:** `dvc push` falhava com `module 'lib' has no attribute 'GEN_EMAIL'` — incompatibilidade entre `pyopenssl==22.0.0` (puxado como dependência antiga do `dvc[gdrive]`) e `cryptography==50.0.1` (versão nova, exigida por outra coisa na árvore de dependências). Resolvi forçando `pyopenssl>=25.0.0` (`uv add --group training "pyopenssl>=25.0.0"` → resolveu pra `26.4.0`).
-
 **Bloqueio no meu lado:** o acesso ao DVC/Google Drive está bloqueado pela política de rede da empresa nesta máquina. Já abri chamado de liberação, mas vai demorar.
 
 ### Pro Fellipe: como subir os 3 arquivos pro Drive
@@ -415,11 +419,11 @@ Como meu acesso está bloqueado, combinamos que **você** faz o primeiro `dvc pu
 
 Passo a passo:
 
-1. Eu te mando os 3 arquivos por fora do Git (Slack/AirDrop/o que for) — eles nunca foram commitados, estão no `.gitignore` do DVC:
+1. Pega os 3 arquivos por fora do Git — eles nunca foram commitados, estão no `.gitignore` do DVC:
    - `medical_tc_labels.csv`
    - `medical_tc_test.csv`
    - `medical_tc_train.csv`
-2. Depois de puxar a `develop` (já com esse PR mergeado), coloca os 3 arquivos exatamente em `data/raw/`, respeitando esses nomes.
+2. Depois de puxar a `develop`, coloca os 3 arquivos exatamente em `data/raw/`, respeitando esses nomes.
 3. Roda:
    ```bash
    uv sync --group training
