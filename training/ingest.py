@@ -6,7 +6,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "Medical_Abstracts_TC_Corpus"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 
 def load_data() -> tuple[pd.DataFrame, pd.DataFrame, dict[int, str]]:
