@@ -1,0 +1,19 @@
+tfidf:
+  max_features: 10000
+  ngram_range: [1, 1]
+  stop_words: "english"
+  min_df: 2
+
+model:
+  type: "RandomForestClassifier"
+  n_estimators: 200
+  max_depth: 25
+  min_samples_leaf: 2
+  class_weight: "balanced"
+  random_state: 42
+
+output:
+  vectorizer_filename: "tfidf_vectorizer.joblib"
+  classifier_filename: "random_forest_classifier.joblib"
+  pipeline_filename: "random_forest_pipeline.joblib"
+  metrics_filename: "random_forest_metrics.json"
