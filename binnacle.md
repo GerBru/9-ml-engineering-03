@@ -314,4 +314,50 @@ Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã da tua pasta local
 
 A URL do `origin` estava com um token do GitHub embutido em texto puro (salvo sem criptografia em `.git/config`); achei também outro token solto num `github_pat.txt` fora de qualquer repositório. Tirei o token da URL do remote, mas isso quer dizer que **o push vai falhar** até eu gerar um PAT novo e autenticar de novo. Pendência: revogar os dois tokens antigos no GitHub e gerar um novo antes do próximo push.
 
+---
 
+## 26/09/2026 - German
+
+### Refatoração pra pipeline modular
+
+O `training/` só tinha um script monolítico (`train_tfidf_rf.py`) fazendo tudo — carregar CSV, vetorizar, treinar, avaliar e salvar numa função só. O material de apoio da Aula 01 da Etapa 3 ("Introdução ao Pipeline de ML") ensina o padrão `ingest → validate → train → evaluate`, orquestrado por um `pipeline.py`, com config externo e testes por módulo. Não é só teoria: é pré-requisito direto pra Etapa 2 do desafio (Airflow), que pede uma task pra ler dados e outra pra treinar/salvar — precisa de funções separadas por estágio pra isso fazer sentido numa DAG.
+
+**Removidos** (substituídos pelo `pipeline.py`): `training/train_tfidf_rf.py`, `training/build_pipeline.py`.
+
+**Novos arquivos em `training/`:**
+
+- `ingest.py` — `load_data()`: lê train/test/labels do Medical Abstracts TC Corpus.
+- `validate.py` — `validate_data()`: checa dataset não vazio, colunas obrigatórias, sem nulos, labels conhecidos, pelo menos 2 classes. Levanta `AssertionError` com mensagem específica se algo falhar.
+- `train.py` — `train_model()`: ajusta TF-IDF + RandomForest (mesmos hiperparâmetros de antes).
+- `evaluate.py` — `evaluate_model()`: accuracy, F1-macro, classification report.
+- `pipeline.py` — orquestra os 4 acima + salva vetorizador, classificador e o `Pipeline` empacotado, com logging em vez de `print`.
+- `config.yaml` — hiperparâmetros e nomes de arquivo de saída, fora do código (facilita reaproveitar na DAG do Airflow depois).
+- `__init__.py` — vira pacote Python de verdade, pra import funcionar tanto direto (`python -m training.pipeline`) quanto nos testes.
+
+```bash
+uv sync --group training
+uv run python -m training.pipeline
+```
+
+Rodei de novo pra conferir que o refactor não mudou o resultado: **accuracy 0.5492, F1-macro 0.5413** — idêntico ao treino anterior.
+
+**Testes novos** (`tests/test_data.py`, `tests/test_train.py`, `tests/test_pipeline.py`): cobrem ingest, todas as validações de `validate_data`, treino/avaliação com dataset sintético pequeno (rápido), e um teste de integração end-to-end que roda o pipeline completo com o dataset real, salvando os artefatos numa pasta temporária (via `monkeypatch.setattr` no `MODELS_DIR`) — não polui o `models/` de verdade. **17/17 testes passam** (os 6 do Fé continuam intactos).
+
+**Ajustes no `pyproject.toml`:**
+
+```diff
+- "httpx2>=2.13.0",
++ "httpx2>=2.12.0",
+```
+
+```toml
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+]
+```
+
+Os dois eram pins/resoluções impossíveis pré-existentes que travavam `uv sync` pra qualquer pessoa: `httpx2==2.13.0` não existe no índice, e o `uv` por padrão tenta resolver dependências pra **todas** as plataformas (inclusive Windows + Python 3.14, que ninguém usa aqui), travando porque `scikit-learn==1.9.0` não existe pra essa combinação. Restringi a resolução a `darwin`/`linux`.
+
+Também adicionei `[tool.pytest.ini_options] pythonpath = ["."]` — necessário pra `from training.ingest import ...` funcionar nos testes.
