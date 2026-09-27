@@ -361,3 +361,27 @@ environments = [
 Os dois eram pins/resoluções impossíveis pré-existentes que travavam `uv sync` pra qualquer pessoa: `httpx2==2.13.0` não existe no índice, e o `uv` por padrão tenta resolver dependências pra **todas** as plataformas (inclusive Windows + Python 3.14, que ninguém usa aqui), travando porque `scikit-learn==1.9.0` não existe pra essa combinação. Restringi a resolução a `darwin`/`linux`.
 
 Também adicionei `[tool.pytest.ini_options] pythonpath = ["."]` — necessário pra `from training.ingest import ...` funcionar nos testes.
+
+---
+
+## 27/09/2026 - German
+
+### Checklist do Tech Challenge no README
+
+Adicionei uma seção de checklist no `README.md` oficial, baseada linha por linha no `docs/Tech Challenge Fase 03.pdf` (Requisitos Obrigatórios, Boas Práticas, Etapas 1–4, Dataset). Marquei o que já está pronto e o que falta, cruzando com o estado real do repo (não com suposição): hoje não existe `.github/workflows`, `docker-compose.yml`, stack de Prometheus/Grafana, DAG do Airflow nem nada de ONNX/quantização neste repo ainda — só a parte de modelagem (treino + API + Docker + latência baseline) está encaminhada.
+
+### Cobertura de testes (`pytest-cov`)
+
+Configurei medição de cobertura, **sob demanda** (decidimos não deixar automático em todo `pytest`, pra não poluir/lentificar o dia a dia). Único arquivo alterado: `pyproject.toml`.
+
+- Adicionei `pytest-cov` no grupo `dev`.
+- Adicionei `[tool.coverage.run]` (`source = ["training", "src/medical_triage"]`, ignora `__init__.py`) e `[tool.coverage.report]` (`show_missing = true`, mostra as linhas exatas não cobertas).
+
+**Importante:** cobertura **não roda sozinha** com `uv run pytest`. Precisa passar as flags na mão:
+
+```bash
+uv sync --group dev --group training
+uv run pytest --cov=training --cov=src/medical_triage --cov-report=term-missing
+```
+
+Resultado da primeira medição: **83% de cobertura total**, 17/17 testes passando. `training/ingest.py`, `validate.py`, `train.py`, `evaluate.py` em 100%; `pipeline.py` em 97%; `train_baseline.py` (script do Fellipe, não testado por ninguém) em 0% — esperado, ninguém importa esse arquivo em teste nenhum.
