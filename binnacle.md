@@ -432,3 +432,27 @@ Passo a passo:
    Como o conteúdo é idêntico byte a byte ao que já está nos `.dvc` commitados, o hash bate automaticamente — o DVC reconhece sem conflito e sobe pro remote `gdrive_storage`. Na primeira vez deve abrir uma autenticação OAuth pelo navegador, com a tua conta Google (a mesma que tem acesso de edição na pasta).
 
 Depois disso, qualquer um (eu incluso, quando o TI liberar) consegue rodar `dvc pull` e recuperar os dados normalmente.
+
+---
+
+## 28/09/2026 - German
+
+### Tuning de hiperparâmetros (RandomizedSearchCV)
+
+Branch separada: `feature/tuning-random-forest`. Vinha da Aula 03 da Etapa 3 (Treinamento de Modelos e Validação) — não é requisito do Tech Challenge, mas os hiperparâmetros do Random Forest até agora tinham sido escolhidos no olho (documentei isso lá atrás, quando resolvi o problema do tamanho do arquivo), nunca por busca sistemática.
+
+**`training/tuning.py`** (novo): `RandomizedSearchCV` com 20 combinações × 5 folds, otimizando `f1_macro`. Espaço de busca limitado de propósito (`max_depth` 15–30, `min_samples_leaf` 1–4, `n_estimators` 100–300) pelo mesmo motivo de sempre — árvore sem limite de profundidade em vetor TF-IDF esparso gera `.joblib` gigante.
+
+**Importante:** lê os CSVs direto de `Medical_Abstracts_TC_Corpus/` (pasta externa), **não** de `data/raw/` (DVC) — meu acesso ao remote do Google Drive segue bloqueado pela política de rede da empresa, então evitei qualquer dependência do `dvc pull` pra rodar essa tarefa.
+
+**Resultado:** `max_depth=28, min_samples_leaf=3, n_estimators=289` — F1-macro de 0.5656 na validação cruzada. Apliquei no `config.yaml` e retreinei o pipeline completo:
+
+| Métrica | Antes | Depois |
+| --- | --- | --- |
+| Accuracy (teste real) | 0.549 | **0.564** |
+| F1-macro (teste real) | 0.541 | **0.558** |
+| Tamanho do `.joblib` | ~18 MB | ~22.5 MB (ainda bem abaixo do limite de 100MB) |
+
+O `random_forest_pipeline.joblib` foi sobrescrito com o modelo novo — mesma estrutura de sempre (`Pipeline` com `tfidf` + `clf` juntos), então o Fellipe não precisa mudar nada no `sklearn_predictor.py`: mesmo nome de arquivo, mesmo contrato (`predict([texto])[0]` retorna string). 17/17 testes continuam passando.
+
+Descoberta de lado, sem ação por enquanto: `models/tfidf_vectorizer.joblib` e `models/random_forest_classifier.joblib` (os artefatos "redundantes" que a gente tinha decidido não versionar) acabaram indo pra `develop` mesmo assim, provavelmente num `git add .` durante o PR do DVC. Não atrapalha nada, só ficou registrado.
