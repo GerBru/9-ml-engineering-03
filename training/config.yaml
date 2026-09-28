@@ -6,9 +6,9 @@ tfidf:
 
 model:
   type: "RandomForestClassifier"
-  n_estimators: 200
-  max_depth: 25
-  min_samples_leaf: 2
+  n_estimators: 289
+  max_depth: 28
+  min_samples_leaf: 3
   class_weight: "balanced"
   random_state: 42
 
