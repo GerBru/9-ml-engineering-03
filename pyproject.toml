@@ -28,6 +28,7 @@ training = [
 environments = [
     "sys_platform == 'darwin'",
     "sys_platform == 'linux'",
+    "sys_platform == 'win32'",
 ]
 
 [build-system]
