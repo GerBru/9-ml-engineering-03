@@ -1,4 +1,5 @@
 """Ingestão de dados - carrega o Medical Abstracts TC Corpus."""
+
 import logging
 from pathlib import Path
 

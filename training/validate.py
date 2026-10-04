@@ -1,4 +1,5 @@
 """Validação de qualidade dos dados antes do treino."""
+
 import logging
 
 import pandas as pd
