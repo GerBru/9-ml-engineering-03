@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest # máquina Linux limpa fornecida pelo GitHub
     steps:
       - name: Baixar o código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Instalar o uv
         uses: astral-sh/setup-uv@v5
