@@ -1,4 +1,4 @@
-name: complete-ci
+name: ci
 
 on:
   push:
@@ -7,7 +7,8 @@ on:
 
 jobs:
   tests: # identificador do job
-    runs-on: ubuntu-latest # máquina Linux limpa fornecida pelo GitHub
+    name: Checagem dos testes
+    runs-on: ubuntu-24.04 # máquina Linux limpa fornecida pelo GitHub
     steps:
       - name: Baixar o código
         uses: actions/checkout@v5
@@ -26,3 +27,24 @@ jobs:
 
       - name: Rodar testes
         run: uv run pytest
+
+  build:
+    name: Build da imagem Docker
+    runs-on: ubuntu-24.04 # máquina Linux limpa fornecida pelo GitHub
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v5
+
+      - name: Criar imagem
+        run: docker build -t medical-triage .
+
+      - name: Subir container
+        run: docker run -d --name api -p 8000:8000 medical-triage
+
+      - name: Smoke test
+        run: bash scripts/smoke_test.sh http://localhost:8000
+
+      - name: Logs do container (só se falhou)
+        if: failure()
+        run: docker logs api
+
