@@ -9,15 +9,15 @@ on:
 jobs:
   tests:                                      # identificador do job
     runs-on: ubuntu-latest                    # máquina Linux limpa fornecida pelo GitHub
-  steps:
-    - name: Baixar o código
-      uses: actions/checkout@v4
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
 
-    - name: Instalar o uv
-      uses: astral-sh/setup-uv@v5
+      - name: Instalar o uv
+        uses: astral-sh/setup-uv@v5
 
-    - name: Instalar depedências
-      run: uv sync --group dev
+      - name: Instalar depedências
+        run: uv sync --group dev
 
-    - name: Rodar testes
-      run: uv run pytest
+      - name: Rodar testes
+        run: uv run pytest
