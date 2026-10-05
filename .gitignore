@@ -26,6 +26,10 @@ htmlcov/
 .env.*
 !.env.example
 
+# Airflow: staging de cada execução da DAG e logs das tasks
+data/processed/
+airflow/logs/
+
 # Sistema operacional / IDE
 .DS_Store
 .idea/
