@@ -484,6 +484,104 @@ Descoberta de lado, sem ação por enquanto: `models/tfidf_vectorizer.joblib` e 
 
 ---
 
+
+
+## 03/10/2026 - German
+
+
+
+Dois bloqueios resolvidos: o `uv.lock` que travava o `uv sync` do Fé e o primeiro `dvc push`, que até agora ninguém tinha conseguido fazer. Os dois dependiam de sair da rede da empresa, então passei a trabalhar num computador pessoal com Windows.
+
+### `uv.lock` amarrado ao índice interno da MELI
+
+O `uv sync --group training` do Fé falhava com 403 ao baixar o `pluggy` de `pypi.artifacts.furycloud.io`. Causa: o `uv.lock` foi gerado na minha máquina do trabalho, que usa o índice interno da MELI, e o lock grava a origem de cada pacote:
+
+```toml
+source = { registry = "https://pypi.artifacts.furycloud.io/simple" }
+```
+
+Eram 1.370 referências. Como é o lock que define de onde baixar, qualquer pessoa fora da rede da empresa tomava 403, mesmo sem nada configurado na própria máquina. Na máquina do trabalho não dava pra corrigir, porque a rede bloqueia o PyPI público.
+
+No Windows, apaguei o lock e gerei do zero:
+
+```bash
+rm uv.lock    # no PowerShell: Remove-Item uv.lock
+uv lock
+```
+
+Rodar só `uv lock` sem apagar não adianta: como o `pyproject.toml` não tinha mudado, o uv reaproveitava o lock antigo com as mesmas URLs. Agora são 0 referências ao índice interno (commit `a9d2c0d`).
+
+### Suporte a Windows no `pyproject.toml`
+
+Adicionei `win32` na lista de plataformas (commit `a3fbe55`). Sem isso, o `uv sync` no Windows recusava rodar ("The current Python platform is not compatible with the lockfile's supported environments"):
+
+```toml
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+    "sys_platform == 'win32'",
+]
+```
+
+Isso amplia a restrição que eu tinha feito em 26/09. Resolvendo pelo PyPI público, o lock fechou nas três plataformas sem problema. Com o lock novo, 15 testes passaram de primeira no Windows; os outros 2 dependem do dataset em `data/raw/`.
+
+### Primeiro `dvc push`: dados agora no Drive
+
+O plano de 27/09 era o Fé fazer o primeiro push, mas ele travou no erro do `uv sync` antes. Fiz do Windows, com os CSVs da pasta externa. Antes conferi o MD5 dos três contra os `.dvc` commitados, e batem byte a byte:
+
+
+| Arquivo                 | MD5                                |
+| ----------------------- | ---------------------------------- |
+| `medical_tc_train.csv`  | `792daf8b6ca8557f88ba68f7cec22b03` |
+| `medical_tc_test.csv`   | `98978fd21c156efe960d901451161817` |
+| `medical_tc_labels.csv` | `77e5f74d409bcc8b08495c2b743fc7fc` |
+
+
+```bash
+uv run dvc add data/raw/medical_tc_train.csv data/raw/medical_tc_test.csv data/raw/medical_tc_labels.csv
+uv run dvc push
+```
+
+Como o conteúdo é idêntico, o `dvc add` não altera os `.dvc`, só coloca os arquivos no cache local antes do push.
+
+**Login bloqueado pelo Google.** O `dvc push` abriu o navegador e o Google respondeu "Se bloqueó esta app": o Google bloqueia o app de login padrão do DVC. O contorno é usar um app OAuth próprio, criado no Google Cloud:
+
+1. Criei um projeto e ativei a **Google Drive API**.
+2. Em **Google Auth Platform**, configurei o app `fiap-tech-challenge`, público **Externo**, em modo **Prueba** (teste).
+3. Adicionei eu e o Fé como **usuários de teste**. Nessa versão do console isso não aparece no assistente de criação: é depois, em **Público → Usuarios de prueba**.
+4. Em **Clientes**, criei um cliente do tipo **App de escritorio** e peguei o ID e o secret.
+
+```bash
+uv run dvc remote modify --local gdrive_storage gdrive_client_id "<id>"
+uv run dvc remote modify --local gdrive_storage gdrive_client_secret "<secret>"
+uv run dvc push
+```
+
+O `--local` grava em `.dvc/config.local`, que fica fora do Git. O ID e o secret não ficam registrados aqui; cada um configura na própria máquina. No login aparece "Google não verificou este app": é esperado, porque o app é nosso e está em teste (**Avançado → Acessar**). Em modo teste, o login expira a cada 7 dias.
+
+**Como ficou no Drive.** O DVC não guarda os arquivos com o nome original, e sim pelo hash: `files/md5/<2 primeiros caracteres>/<resto do hash>`.
+
+
+| Pasta | Arquivo                 |
+| ----- | ----------------------- |
+| `77`  | `medical_tc_labels.csv` |
+| `79`  | `medical_tc_train.csv`  |
+| `98`  | `medical_tc_test.csv`   |
+
+
+Não renomear, mover nem apagar nada direto pelo Drive. Qualquer mudança nos dados passa pelo DVC.
+
+### Minha máquina do trabalho
+
+Continua servindo pra Git e pra editar código. Não roda `dvc pull`/`dvc push` (login do Google bloqueado) nem instala dependências novas, porque a rede bloqueia o PyPI público e o `uv.lock` agora aponta pra ele. Pra rodar com o `.venv` que já existe sem o uv tentar sincronizar:
+
+```bash
+uv run --no-sync pytest
+```
+
+Treino, DVC e qualquer coisa que precise baixar pacote: no Windows.
+
 ---
 
 
