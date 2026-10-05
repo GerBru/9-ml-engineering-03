@@ -10,9 +10,11 @@ router = APIRouter()
 
 ModelDep = Annotated[Pipeline, Depends(get_model)]
 
+
 @router.get("/health")
 def health_check() -> dict:
     return {"status": "ok"}
+
 
 @router.post("/predict")
 def predict(body: PredictRequest, model: ModelDep) -> PredictResponse:

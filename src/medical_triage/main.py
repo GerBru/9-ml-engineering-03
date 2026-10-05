@@ -14,6 +14,7 @@ async def lifespan(app: FastAPI):
     yield  # aplicação roda aqui
     # aqui viria cleanup no shutdown, se necessário
 
+
 app = FastAPI(title="Medical Triage API", lifespan=lifespan)
 
 app.include_router(router)

@@ -3,6 +3,7 @@
 Execução:
     uv run python -m training.pipeline
 """
+
 import json
 import logging
 import time

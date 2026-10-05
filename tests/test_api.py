@@ -29,6 +29,7 @@ def client():
 
 # --- Testes do /health ---
 
+
 def test_health_return_200(client):
     response = client.get("/health")
     assert response.status_code == 200
@@ -40,6 +41,7 @@ def test_health_return_status_ok(client):
 
 
 # --- Testes do /predict ---
+
 
 def test_predict_return_200(client):
     response = client.post(
@@ -65,6 +67,7 @@ def test_predict_not_text_return_422(client):
 
 
 # --- Teste do modelo indisponível ---
+
 
 def test_predict_no_model_return_503():
     # Sem override: get_model vai encontrar app.state.model = None

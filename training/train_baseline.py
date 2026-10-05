@@ -3,8 +3,10 @@ Treina um modelo baseline de classificação de laudos médicos.
 Dataset: sintético, baseado nas 5 classes do Medical Abstracts TC Corpus.
 Usado apenas para desenvolvimento da API enquanto o modelo real não está pronto.
 """
-import joblib
+
 from pathlib import Path
+
+import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -33,19 +35,32 @@ TEXTOS = [
 ]
 
 LABELS = [
-    "neoplasms", "neoplasms", "neoplasms",
-    "digestive", "digestive", "digestive",
-    "nervous", "nervous", "nervous",
-    "cardiovascular", "cardiovascular", "cardiovascular",
-    "general", "general", "general",
+    "neoplasms",
+    "neoplasms",
+    "neoplasms",
+    "digestive",
+    "digestive",
+    "digestive",
+    "nervous",
+    "nervous",
+    "nervous",
+    "cardiovascular",
+    "cardiovascular",
+    "cardiovascular",
+    "general",
+    "general",
+    "general",
 ]
+
 
 def treinar_modelo() -> Pipeline:
     """Treina e retorna o pipeline TF-IDF + Logistic Regression."""
-    modelo = Pipeline([
-        ("tfidf", TfidfVectorizer(max_features=500)),
-        ("clf", LogisticRegression(max_iter=200, random_state=42)),
-    ])
+    modelo = Pipeline(
+        [
+            ("tfidf", TfidfVectorizer(max_features=500)),
+            ("clf", LogisticRegression(max_iter=200, random_state=42)),
+        ]
+    )
     modelo.fit(TEXTOS, LABELS)
     return modelo
 

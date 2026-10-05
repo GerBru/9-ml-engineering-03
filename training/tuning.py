@@ -8,6 +8,7 @@ depender do dvc pull.
 Execução:
     uv run python -m training.tuning
 """
+
 import json
 import logging
 from pathlib import Path
@@ -77,9 +78,7 @@ def buscar_hiperparametros(
         n_jobs=-1,
         verbose=1,
     )
-    logger.info(
-        "Rodando RandomizedSearchCV (n_iter=%d, cv=%d)...", n_iter, cv
-    )
+    logger.info("Rodando RandomizedSearchCV (n_iter=%d, cv=%d)...", n_iter, cv)
     search.fit(X, y)
 
     logger.info("Melhores hiperparâmetros: %s", search.best_params_)
