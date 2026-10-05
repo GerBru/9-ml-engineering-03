@@ -55,9 +55,9 @@ A pasta que eu tinha em mente naquele dia ainda era plana (`api/`, `schemas/`, `
 
 Docker e o texto de decisão de nuvem no README oficial ficaram para depois.
 
-
-
 ---
+
+
 
 ## 14/09/2026 - Fellipe
 
@@ -138,9 +138,9 @@ curl -X POST http://localhost:8000/predict \
   -d '{"text": "patient with cardiac chest pain and heart failure"}'
 ```
 
-
-
 ---
+
+
 
 ## 15/09/2026 - Fellipe
 
@@ -227,11 +227,13 @@ uv run pytest tests/test_api.py -v
 
 [^1]: **Aclaración:** Una aplicación ASGI (por sus siglas en inglés, Asynchronous Server Gateway Interface) es un estándar y objeto ejecutable en Python que permite la comunicación asíncrona entre un servidor web y una aplicación o framework.
 
-
-
 ---
 
+
+
 ## 15/09/2026 - German
+
+
 
 ### Dataset real: Medical Abstracts TC Corpus
 
@@ -239,13 +241,17 @@ Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo
 
 5 classes, com desbalanceamento real (não é o dataset sintético equilibrado do baseline):
 
-| Classe | Suporte no teste |
-| --- | --- |
-| neoplasms | 633 |
-| digestive system diseases | 299 |
-| nervous system diseases | 385 |
-| cardiovascular diseases | 610 |
-| general pathological conditions | 961 |
+
+| Classe                          | Suporte no teste |
+| ------------------------------- | ---------------- |
+| neoplasms                       | 633              |
+| digestive system diseases       | 299              |
+| nervous system diseases         | 385              |
+| cardiovascular diseases         | 610              |
+| general pathological conditions | 961              |
+
+
+
 
 ### TF-IDF + Random Forest: voltas que dei até chegar num resultado razoável:
 
@@ -254,18 +260,22 @@ Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo
 
 **Métricas finais (conjunto de teste, 2888 amostras):**
 
-| Métrica | Valor |
-| --- | --- |
+
+| Métrica  | Valor |
+| -------- | ----- |
 | Accuracy | 0.549 |
 | F1-macro | 0.541 |
 
-| Classe | Precision | Recall | F1 |
-| --- | --- | --- | --- |
-| neoplasms | 0.66 | 0.76 | 0.71 |
-| digestive system diseases | 0.44 | 0.70 | 0.54 |
-| nervous system diseases | 0.42 | 0.73 | 0.54 |
-| cardiovascular diseases | 0.62 | 0.78 | 0.69 |
-| general pathological conditions | 0.53 | **0.15** | 0.23 |
+
+
+| Classe                          | Precision | Recall   | F1   |
+| ------------------------------- | --------- | -------- | ---- |
+| neoplasms                       | 0.66      | 0.76     | 0.71 |
+| digestive system diseases       | 0.44      | 0.70     | 0.54 |
+| nervous system diseases         | 0.42      | 0.73     | 0.54 |
+| cardiovascular diseases         | 0.62      | 0.78     | 0.69 |
+| general pathological conditions | 0.53      | **0.15** | 0.23 |
+
 
 **Limitação que já vi e ainda não resolvi:** o `class_weight="balanced"` super-corrigiu pra classe majoritária — o recall dela despencou pra 0.15 (o modelo praticamente parou de prever essa classe pra acertar mais as minoritárias). Compensa no F1-macro agregado, mas não é um resultado equilibrado de verdade. Próxima iteração: testar `class_weight="balanced_subsample"`, threshold por classe, ou balancear via oversampling/undersampling antes do TF-IDF.
 
@@ -273,7 +283,8 @@ Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo
 
 O `random_forest_pipeline.joblib` já contém o vetorizador (TF-IDF) e o classificador (RF) encadeados. Se precisar retreinar do zero por qualquer motivo, o dataset `Medical_Abstracts_TC_Corpus/` continua guardado fora do repo, então nada se perde.
 
-**Fica assim, em `models/`:**
+**Fica assim, em** `models/`**:**
+
 - `random_forest_pipeline.joblib` (~18.1 MB) — pronto pra API
 - `classifier.joblib` — o do Fé, inalterado
 - `random_forest_metrics.json` — métricas do treino
@@ -301,6 +312,8 @@ Pra instalar o `pandas` (grupo de dependência novo, `training`, só pra scripts
 + training = ["pandas>=3.0.5"]
 ```
 
+
+
 ### Como reproduzir
 
 ```bash
@@ -314,11 +327,13 @@ Precisa ter a pasta `Medical_Abstracts_TC_Corpus/` como irmã da tua pasta local
 
 A URL do `origin` estava com um token do GitHub embutido em texto puro (salvo sem criptografia em `.git/config`); achei também outro token solto num `github_pat.txt` fora de qualquer repositório. Tirei o token da URL do remote, mas isso quer dizer que **o push vai falhar** até eu gerar um PAT novo e autenticar de novo. Pendência: revogar os dois tokens antigos no GitHub e gerar um novo antes do próximo push.
 
-
-
 ---
 
+
+
 ## 26/09/2026 - German
+
+
 
 ### Refatoração pra pipeline modular
 
@@ -326,7 +341,7 @@ O `training/` só tinha um script monolítico (`train_tfidf_rf.py`) fazendo tudo
 
 **Removidos** (substituídos pelo `pipeline.py`): `training/train_tfidf_rf.py`, `training/build_pipeline.py`.
 
-**Novos arquivos em `training/`:**
+**Novos arquivos em** `training/`**:**
 
 - `ingest.py` — `load_data()`: lê train/test/labels do Medical Abstracts TC Corpus.
 - `validate.py` — `validate_data()`: checa dataset não vazio, colunas obrigatórias, sem nulos, labels conhecidos, pelo menos 2 classes. Levanta `AssertionError` com mensagem específica se algo falhar.
@@ -345,7 +360,7 @@ Rodei de novo pra conferir que o refactor não mudou o resultado: **accuracy 0.5
 
 **Testes novos** (`tests/test_data.py`, `tests/test_train.py`, `tests/test_pipeline.py`): cobrem ingest, todas as validações de `validate_data`, treino/avaliação com dataset sintético pequeno (rápido), e um teste de integração end-to-end que roda o pipeline completo com o dataset real, salvando os artefatos numa pasta temporária (via `monkeypatch.setattr` no `MODELS_DIR`) — não polui o `models/` de verdade. **17/17 testes passam** (os 6 do Fé continuam intactos).
 
-**Ajustes no `pyproject.toml`:**
+**Ajustes no** `pyproject.toml`**:**
 
 ```diff
 - "httpx2>=2.13.0",
@@ -364,11 +379,13 @@ Os dois eram pins/resoluções impossíveis pré-existentes que travavam `uv syn
 
 Também adicionei `[tool.pytest.ini_options] pythonpath = ["."]` — necessário pra `from training.ingest import ...` funcionar nos testes.
 
-
-
 ---
 
+
+
 ## 27/09/2026 - German
+
+
 
 ### Checklist do Tech Challenge no README
 
@@ -390,11 +407,13 @@ uv run pytest --cov=training --cov=src/medical_triage --cov-report=term-missing
 
 Resultado da primeira medição: **83% de cobertura total**, 17/17 testes passando. `training/ingest.py`, `validate.py`, `train.py`, `evaluate.py` em 100%; `pipeline.py` em 97%; `train_baseline.py` (script do Fellipe, não testado por ninguém) em 0% — esperado, ninguém importa esse arquivo em teste nenhum.
 
-
-
 ---
 
+
+
 ## 27/09/2026 - German
+
+
 
 ### DVC pra versionar o dataset
 
@@ -420,39 +439,117 @@ Como meu acesso está bloqueado, combinamos que **você** faz o primeiro `dvc pu
 Passo a passo:
 
 1. Pega os 3 arquivos por fora do Git — eles nunca foram commitados, estão no `.gitignore` do DVC:
-   - `medical_tc_labels.csv`
-   - `medical_tc_test.csv`
-   - `medical_tc_train.csv`
+  - `medical_tc_labels.csv`
+  - `medical_tc_test.csv`
+  - `medical_tc_train.csv`
 2. Depois de puxar a `develop`, coloca os 3 arquivos exatamente em `data/raw/`, respeitando esses nomes.
 3. Roda:
-   ```bash
+  ```bash
    uv sync --group training
    uv run dvc push
-   ```
+  ```
    Como o conteúdo é idêntico byte a byte ao que já está nos `.dvc` commitados, o hash bate automaticamente — o DVC reconhece sem conflito e sobe pro remote `gdrive_storage`. Na primeira vez deve abrir uma autenticação OAuth pelo navegador, com a tua conta Google (a mesma que tem acesso de edição na pasta).
 
 Depois disso, qualquer um (eu incluso, quando o TI liberar) consegue rodar `dvc pull` e recuperar os dados normalmente.
 
 ---
 
+
+
 ## 28/09/2026 - German
+
+
 
 ### Tuning de hiperparâmetros (RandomizedSearchCV)
 
 Branch separada: `feature/tuning-random-forest`. Vinha da Aula 03 da Etapa 3 (Treinamento de Modelos e Validação) — não é requisito do Tech Challenge, mas os hiperparâmetros do Random Forest até agora tinham sido escolhidos no olho (documentei isso lá atrás, quando resolvi o problema do tamanho do arquivo), nunca por busca sistemática.
 
-**`training/tuning.py`** (novo): `RandomizedSearchCV` com 20 combinações × 5 folds, otimizando `f1_macro`. Espaço de busca limitado de propósito (`max_depth` 15–30, `min_samples_leaf` 1–4, `n_estimators` 100–300) pelo mesmo motivo de sempre — árvore sem limite de profundidade em vetor TF-IDF esparso gera `.joblib` gigante.
+`training/tuning.py` (novo): `RandomizedSearchCV` com 20 combinações × 5 folds, otimizando `f1_macro`. Espaço de busca limitado de propósito (`max_depth` 15–30, `min_samples_leaf` 1–4, `n_estimators` 100–300) pelo mesmo motivo de sempre — árvore sem limite de profundidade em vetor TF-IDF esparso gera `.joblib` gigante.
 
 **Importante:** lê os CSVs direto de `Medical_Abstracts_TC_Corpus/` (pasta externa), **não** de `data/raw/` (DVC) — meu acesso ao remote do Google Drive segue bloqueado pela política de rede da empresa, então evitei qualquer dependência do `dvc pull` pra rodar essa tarefa.
 
 **Resultado:** `max_depth=28, min_samples_leaf=3, n_estimators=289` — F1-macro de 0.5656 na validação cruzada. Apliquei no `config.yaml` e retreinei o pipeline completo:
 
-| Métrica | Antes | Depois |
-| --- | --- | --- |
-| Accuracy (teste real) | 0.549 | **0.564** |
-| F1-macro (teste real) | 0.541 | **0.558** |
-| Tamanho do `.joblib` | ~18 MB | ~22.5 MB (ainda bem abaixo do limite de 100MB) |
+
+| Métrica               | Antes  | Depois                                         |
+| --------------------- | ------ | ---------------------------------------------- |
+| Accuracy (teste real) | 0.549  | **0.564**                                      |
+| F1-macro (teste real) | 0.541  | **0.558**                                      |
+| Tamanho do `.joblib`  | ~18 MB | ~22.5 MB (ainda bem abaixo do limite de 100MB) |
+
 
 O `random_forest_pipeline.joblib` foi sobrescrito com o modelo novo — mesma estrutura de sempre (`Pipeline` com `tfidf` + `clf` juntos), então o Fellipe não precisa mudar nada no `sklearn_predictor.py`: mesmo nome de arquivo, mesmo contrato (`predict([texto])[0]` retorna string). 17/17 testes continuam passando.
 
 Descoberta de lado, sem ação por enquanto: `models/tfidf_vectorizer.joblib` e `models/random_forest_classifier.joblib` (os artefatos "redundantes" que a gente tinha decidido não versionar) acabaram indo pra `develop` mesmo assim, provavelmente num `git add .` durante o PR do DVC. Não atrapalha nada, só ficou registrado.
+
+---
+
+---
+
+
+
+## 04/10/2026 - Fellipe
+
+Quatro frentes: setup do DVC, lint no projeto inteiro, CI no GitHub Actions e smoke test do container. O CI do meu escopo ficou montado; o **CD não será implementado** e fica documentado no README como evolução.
+
+### DVC (setup na minha máquina)
+
+Segui o passo a passo do German. As credenciais do Google ficam só em `.dvc/config.local` (não vai para o Git) e não são registradas aqui. O login expira a cada 7 dias.
+
+```bash
+git pull origin develop
+uv sync --group dev --group training
+uv run dvc remote modify --local gdrive_storage gdrive_client_id "<id>"
+uv run dvc remote modify --local gdrive_storage gdrive_client_secret "<secret>"
+uv run dvc pull
+uv run pytest
+```
+
+Regra para quem alterar dado: `dvc add` → `git add` do `.dvc` → `git commit` → `dvc push` → `git push`. Esquecer o `dvc push` quebra o `dvc pull` de quem recebe o ponteiro.
+
+### Lint no projeto inteiro
+
+`ruff check` achou 1 problema (imports fora de ordem em `training/train_baseline.py`) e `ruff format --check` reformataria 13 arquivos, todos cosméticos. Apliquei `ruff check --fix .` e `ruff format .` no projeto **inteiro**, incluindo `training/`: padrão só vale se for para o time todo. Foi num commit separado só de estilo. **German:** faz `git pull`/rebase antes de continuar mexendo em `training/`.
+
+### CI no GitHub Actions
+
+Arquivo `.github/workflows/ci.yml`. Gatilhos: `push` em `develop` e `main`, e `pull_request` para qualquer branch. Dois jobs em **paralelo**, sem `needs`, porque respondem perguntas diferentes (o código está certo? a imagem sobe?):
+
+
+| Job     | Steps                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests` | checkout@v5 → setup-uv → `uv sync --group dev --group training` → `ruff check .` → `ruff format --check .` → `pytest`                 |
+| `build` | checkout@v5 → `docker build -t medical-triage .` → `docker run -d --name api -p 8000:8000` → smoke test → logs do container se falhar |
+
+
+Máquina fixada em `ubuntu-24.04` (o `ubuntu-latest` migra para o Ubuntu 26 em 19/10/2026 e poderia mudar o comportamento do CI sem mexer no código).
+
+Erros do caminho: o primeiro run quebrou por indentação do YAML (`steps` fora do job) e depois por `uv sync --group dev` sem o grupo `training` (faltavam `pandas` e `pyyaml`).
+
+**Resultado do último run:** dois testes estão falhando no job de tests devido ao DVC e o job de build está funcionando com smoke test validando.
+
+### Smoke test do container
+
+`scripts/smoke_test.sh [url]` (padrão `http://localhost:8000`). Espera o `/health` responder (até 30 tentativas, 1s) e depois chama `/predict` e confere o campo `label`. O `/health` sozinho não basta: ele responde mesmo sem o modelo, e só o `/predict` prova que o `.joblib` foi copiado e carregado. O script **não sobe nem derruba container**: recebe só uma URL, então no futuro serve contra um ambiente implantado.
+
+```bash
+docker run -d --name api -p 8000:8000 medical-triage
+./scripts/smoke_test.sh
+docker rm -f api
+```
+
+
+
+### Decisões
+
+- **CD fora do escopo.** Build + push no registry + deploy ficam como evolução planejada, descrita no README. O `build` do CI só **verifica** (não publica).
+- **Imagem como artefato adiada:** hoje não há quem a consuma.
+- **Proteção de branch** (`develop` e `main`: exigir PR e status checks) só depois que o `tests` estiver estável. Os checks se chamam pelo `name:` dos jobs ("Checagem dos testes" e "Build da imagem Docker").
+
+
+
+### Para alinhar com o German
+
+1. **Testes que dependem de** `data/raw/` **no CI:** proposta de marker `@pytest.mark.requires_data` (registrado no `pyproject.toml`) com `pytest -m "not requires_data"` no CI, e/ou testes de lógica com CSV sintético pequeno. Os testes são dele, então a mudança é combinada.
+2. **Versionar o** `.joblib` **no DVC em vez do Git:** cada retreino adiciona um binário novo ao histórico (~22,5 MB hoje). Se mudar, o `COPY models/` do Dockerfile no CI quebra, então precisa ser combinado antes.
+
