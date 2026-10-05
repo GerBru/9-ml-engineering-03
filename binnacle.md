@@ -582,3 +582,37 @@ docker rm -f api
 1. **Testes que dependem de** `data/raw/` **no CI:** proposta de marker `@pytest.mark.requires_data` (registrado no `pyproject.toml`) com `pytest -m "not requires_data"` no CI, e/ou testes de lógica com CSV sintético pequeno. Os testes são dele, então a mudança é combinada.
 2. **Versionar o** `.joblib` **no DVC em vez do Git:** cada retreino adiciona um binário novo ao histórico (~22,5 MB hoje). Se mudar, o `COPY models/` do Dockerfile no CI quebra, então precisa ser combinado antes.
 
+---
+
+
+
+## 05/10/2026 - German
+
+
+
+### DAG do Airflow para treino
+
+Branch `feature/airflow-dag-treino`, mesclada na `develop` (PR #5). Arquivo `airflow/dags/training_dag.py`, DAG `medical_triage_training`:
+
+```
+ingest_data → validate_data → train_model → evaluate_model → deploy_model
+```
+
+- A DAG só orquestra. A lógica de cada task fica em `training/dag_tasks.py`, reaproveitando `ingest`, `validate`, `train` e `evaluate`, pra poder testar sem o Airflow instalado.
+- Entre as tasks só passam caminhos e números (XCom). DataFrames e modelos ficam numa pasta de staging por execução, `data/processed/<run_id>/`, que está no `.gitignore`.
+- **Quality gate:** o `evaluate_model` só deixa publicar se o F1-macro no teste for ≥ `quality_gate.min_f1_macro` (0.50 no `config.yaml`; o modelo atual faz 0.558). Se reprovar, a task falha sem retry e o `deploy_model` não roda.
+- O `deploy_model` grava o Pipeline em `models/`, no mesmo arquivo que a API carrega. A parte de salvar artefatos virou `pipeline.save_artifacts()`, usada tanto pelo `run_pipeline()` quanto pela DAG.
+- Execução só manual (`schedule=None`), 2 retries com backoff, timeout de 30 min e callback de alerta em falha (por enquanto só registra no log).
+
+**Airflow local** (`airflow/docker-compose.yaml`): versão 2.10.4 com LocalExecutor (sem redis nem worker) e imagem própria (`airflow/Dockerfile`) com `scikit-learn==1.9.0`, a mesma versão da API, senão o `.joblib` gerado pela DAG não carrega na API. `numpy` e `pandas` ficaram fixos nas versões que a imagem já traz, pra não quebrar o pandas dela.
+
+```bash
+cd airflow
+docker compose up airflow-init   # só na primeira vez
+docker compose up -d             # UI em http://localhost:8080 (airflow / airflow)
+```
+
+No Mac/Linux, criar `airflow/.env` com `AIRFLOW_UID=<saída de id -u>`.
+
+**Testes:** 5 novos em `tests/test_dag_tasks.py`, com dataset sintético (não dependem do DVC, então rodam no CI): encadeamento das tasks, retornos cabendo no XCom, quality gate reprovado sem publicar o modelo e nome da pasta de staging válido no Windows. Total agora: 22 testes.
+
