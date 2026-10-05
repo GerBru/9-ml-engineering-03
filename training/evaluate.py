@@ -37,3 +37,17 @@ def evaluate_model(
         f"F1-macro: {metricas['f1_macro']:.4f}"
     )
     return metricas
+
+
+def check_quality_gate(metricas: dict, min_f1_macro: float) -> None:
+    """Barra a publicação do modelo se o F1-macro ficar abaixo do mínimo.
+
+    Raises:
+        ValueError: se metricas["f1_macro"] < min_f1_macro.
+    """
+    f1_macro = metricas["f1_macro"]
+    if f1_macro < min_f1_macro:
+        raise ValueError(
+            f"Quality gate reprovado: F1-macro {f1_macro:.4f} < mínimo {min_f1_macro}"
+        )
+    logger.info(f"✅ Quality gate aprovado: F1-macro {f1_macro:.4f} >= {min_f1_macro}")

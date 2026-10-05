@@ -1,0 +1,11 @@
+# Dependências do treino instaladas dentro da imagem do Airflow (ver Dockerfile).
+#
+# scikit-learn fixo na MESMA versão da API (pyproject.toml): o .joblib gerado
+# pela DAG é carregado pela API, e o joblib quebra se as versões divergirem.
+scikit-learn==1.9.0
+
+# numpy e pandas fixos nas versões que a imagem do Airflow 2.10.4 já traz
+# (constraints oficiais pra Python 3.12). Sem isso o pip puxa o scipy mais
+# novo, que exige numpy 2, troca o numpy da imagem e quebra o pandas 2.1.4.
+numpy==1.26.4
+pandas==2.1.4

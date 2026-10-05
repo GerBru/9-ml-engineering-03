@@ -33,6 +33,34 @@ def load_config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text())
 
 
+def save_artifacts(vetorizador, modelo, metricas: dict, config: dict) -> Path:
+    """Salva vetorizador, classificador, Pipeline empacotado e métricas em models/.
+
+    Usado tanto pelo run_pipeline() quanto pela task deploy_model da DAG do
+    Airflow. Sempre sobrescreve os arquivos, então rodar de novo é seguro.
+
+    Returns:
+        Caminho do Pipeline empacotado (o arquivo que a API carrega).
+    """
+    output = config["output"]
+    MODELS_DIR.mkdir(exist_ok=True)
+
+    joblib.dump(vetorizador, MODELS_DIR / output["vectorizer_filename"])
+    joblib.dump(modelo, MODELS_DIR / output["classifier_filename"])
+
+    # Empacota os dois componentes já treinados num Pipeline único, pronto
+    # pro contrato que a API espera (joblib.load(path).predict([texto])).
+    pipeline_path = MODELS_DIR / output["pipeline_filename"]
+    pipeline_sklearn = Pipeline([("tfidf", vetorizador), ("clf", modelo)])
+    joblib.dump(pipeline_sklearn, pipeline_path)
+
+    (MODELS_DIR / output["metrics_filename"]).write_text(
+        json.dumps(metricas, indent=2, ensure_ascii=False)
+    )
+    logger.info(f"💾 Artefatos salvos em {MODELS_DIR}")
+    return pipeline_path
+
+
 def run_pipeline() -> dict:
     """Executa o pipeline completo e retorna as métricas de avaliação."""
     inicio = time.time()
@@ -54,22 +82,8 @@ def run_pipeline() -> dict:
     metricas["n_treino"] = len(train_df)
 
     # 5. Deploy (salvar artefatos localmente)
-    output = config["output"]
-    MODELS_DIR.mkdir(exist_ok=True)
+    save_artifacts(vetorizador, modelo, metricas, config)
 
-    joblib.dump(vetorizador, MODELS_DIR / output["vectorizer_filename"])
-    joblib.dump(modelo, MODELS_DIR / output["classifier_filename"])
-
-    # Empacota os dois componentes já treinados num Pipeline único, pronto
-    # pro contrato que a API espera (joblib.load(path).predict([texto])).
-    pipeline_sklearn = Pipeline([("tfidf", vetorizador), ("clf", modelo)])
-    joblib.dump(pipeline_sklearn, MODELS_DIR / output["pipeline_filename"])
-
-    (MODELS_DIR / output["metrics_filename"]).write_text(
-        json.dumps(metricas, indent=2, ensure_ascii=False)
-    )
-
-    logger.info(f"💾 Artefatos salvos em {MODELS_DIR}")
     logger.info(
         f"🎉 Pipeline concluído em {time.time() - inicio:.1f}s | "
         f"Accuracy: {metricas['accuracy']:.4f} | F1-macro: {metricas['f1_macro']:.4f}"
