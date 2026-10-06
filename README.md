@@ -27,15 +27,15 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 - [x] Modelo de classificação de texto (NLP): TF-IDF + Random Forest (`training/`, `models/random_forest_pipeline.joblib`)
 - [x] API REST com FastAPI (`src/medical_triage/`)
 - [x] Dockerfile funcional para o serviço de inferência
-- [ ] Pipeline CI/CD básico com GitHub Actions (lint → test → build)
-- [ ] Script ou DAG Airflow simples para pipeline de treino/retreino
+- [x] Pipeline CI/CD básico com GitHub Actions (lint → test → build) (`.github/workflows/ci.yaml`) — o job de testes ainda falha nos 2 testes que dependem do dataset (DVC); CD fica fora do escopo
+- [x] Script ou DAG Airflow simples para pipeline de treino/retreino (`airflow/dags/training_dag.py`)
 - [ ] Stack de monitoramento local: API + Prometheus + Grafana via Docker Compose
 - [x] Histórico de commits semântico e organizado
 
 ## Boas Práticas Obrigatórias
 
-- [ ] CI/CD com pelo menos 2 automações (lint + testes) — testes já existem e passam localmente (`uv run pytest`, 17/17), falta o workflow do GitHub Actions rodando isso a cada push
-- [ ] DAG Airflow funcional (ingestão → treino → salvamento do modelo)
+- [x] CI/CD com pelo menos 2 automações (lint + testes) — `ruff check`, `ruff format --check` e `pytest` a cada push/PR; 2 dos 22 testes falham no CI por dependerem do dataset (DVC)
+- [ ] DAG Airflow funcional (ingestão → treino → salvamento do modelo) — DAG implementada (`ingest → validate → train → evaluate → deploy`, com quality gate); falta registrar uma execução completa no Airflow
 - [ ] Dashboard Grafana com pelo menos 3 painéis
 - [ ] Otimização de performance (ONNX, quantização ou pruning)
 
@@ -48,8 +48,8 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 
 ## Etapa 2 — CI/CD e Pipeline Automatizado
 
-- [ ] Workflow GitHub Actions rodando lint + pytest a cada push
-- [ ] DAG Airflow simulando o treino (task de leitura de CSV + task de treino/salvamento)
+- [x] Workflow GitHub Actions rodando lint + pytest a cada push (push em `develop`/`main` e em todo PR)
+- [x] DAG Airflow simulando o treino (task de leitura de CSV + task de treino/salvamento) — `ingest_data` lê os CSVs; `train_model` e `deploy_model` treinam e salvam em `models/`
 - [x] Pipeline de treino já modular, pronto para virar tasks da DAG (`training/ingest.py`, `validate.py`, `train.py`, `evaluate.py`, `pipeline.py`)
 
 ## Etapa 3 — Monitoramento e Observabilidade

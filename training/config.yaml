@@ -12,6 +12,11 @@ model:
   class_weight: "balanced"
   random_state: 42
 
+# Quality gate da DAG: o modelo só é publicado em models/ se o F1-macro no
+# conjunto de teste for >= este valor. O modelo atual faz 0.558.
+quality_gate:
+  min_f1_macro: 0.50
+
 output:
   vectorizer_filename: "tfidf_vectorizer.joblib"
   classifier_filename: "random_forest_classifier.joblib"

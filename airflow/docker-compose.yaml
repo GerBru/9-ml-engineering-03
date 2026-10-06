@@ -1,0 +1,111 @@
+# Airflow 2.10.4 local para rodar a DAG de treino.
+#
+# Baseado no docker-compose.yaml oficial
+# (https://airflow.apache.org/docs/apache-airflow/2.10.4/docker-compose.yaml),
+# com duas mudanças:
+#   - LocalExecutor em vez de CeleryExecutor: sem redis, worker e flower. Bem
+#     mais leve, e as tasks rodam no próprio scheduler.
+#   - Imagem própria (Dockerfile) com scikit-learn e pandas, e a raiz do
+#     projeto montada em /opt/airflow/project pra DAG importar training/.
+#
+# Uso (dentro desta pasta airflow/):
+#   docker compose up airflow-init    # 1a vez: cria o banco e o usuário
+#   docker compose up -d              # sobe webserver + scheduler
+#   UI: http://localhost:8080  (login airflow / airflow)
+
+x-airflow-common:
+  &airflow-common
+  build: .
+  image: medical-triage-airflow:2.10.4
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Deixa a DAG fazer "from training import dag_tasks".
+    PYTHONPATH: /opt/airflow/project
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    # Raiz do repo: training/, data/raw/ (entrada) e models/ (saída da DAG).
+    - ..:/opt/airflow/project
+  # No Windows o padrão 50000 funciona. No Mac/Linux, criar um .env nesta
+  # pasta com AIRFLOW_UID=<saída de "id -u">.
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /sources/logs
+        chown -R "${AIRFLOW_UID:-50000}:0" /sources/logs
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+    user: "0:0"
+    volumes:
+      - .:/sources
+
+volumes:
+  postgres-db-volume:

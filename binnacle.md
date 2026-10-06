@@ -484,6 +484,35 @@ Descoberta de lado, sem ação por enquanto: `models/tfidf_vectorizer.joblib` e 
 
 ---
 
+
+
+## 03/10/2026 - German
+
+
+
+Destravei o `uv sync` do Fé e fiz o primeiro `dvc push`. As duas coisas eram bloqueadas pela rede da empresa, então fiz de um computador pessoal com Windows.
+
+### `uv.lock` sem o índice interno da MELI
+
+O `uv sync` do Fé dava 403 porque o `uv.lock`, gerado na minha máquina do trabalho, gravava `pypi.artifacts.furycloud.io` como origem de cada pacote (1.370 referências). Apaguei o lock e gerei de novo pelo PyPI público (`a9d2c0d`). Só rodar `uv lock` não basta: sem mudança no `pyproject.toml`, o uv reaproveita o lock antigo.
+
+Também adicionei `sys_platform == 'win32'` em `[tool.uv] environments` (`a3fbe55`), senão o `uv sync` recusa rodar no Windows.
+
+### Primeiro `dvc push`
+
+Os MD5 dos três CSVs batem com os `.dvc` commitados, então foi só `dvc add` (não altera os `.dvc`) e `dvc push`.
+
+O Google bloqueia o login padrão do DVC ("Se bloqueó esta app"). Contorno: app OAuth próprio no Google Cloud (`fiap-tech-challenge`, público Externo, modo teste), com a Google Drive API ativada, eu e o Fé como usuários de teste (em **Público → Usuarios de prueba**) e um cliente do tipo **App de escritorio**. Cada um configura na própria máquina:
+
+```bash
+uv run dvc remote modify --local gdrive_storage gdrive_client_id "<id>"
+uv run dvc remote modify --local gdrive_storage gdrive_client_secret "<secret>"
+```
+
+O aviso "Google não verificou este app" é esperado (**Avançado → Acessar**). O login expira a cada 7 dias.
+
+No Drive, o DVC guarda por hash (`files/md5/77`, `79`, `98`), não pelo nome do arquivo. Não mexer direto por lá.
+
 ---
 
 
@@ -538,14 +567,11 @@ docker run -d --name api -p 8000:8000 medical-triage
 docker rm -f api
 ```
 
-
-
 ### Decisões
 
 - **CD fora do escopo.** Build + push no registry + deploy ficam como evolução planejada, descrita no README. O `build` do CI só **verifica** (não publica).
 - **Imagem como artefato adiada:** hoje não há quem a consuma.
 - **Proteção de branch** (`develop` e `main`: exigir PR e status checks) só depois que o `tests` estiver estável. Os checks se chamam pelo `name:` dos jobs ("Checagem dos testes" e "Build da imagem Docker").
-
 
 
 ### Para alinhar com o German
@@ -555,7 +581,37 @@ docker rm -f api
 
 ---
 
-## 06/10/2026 - Fellipe
+## 05/10/2026 - German
+
+### DAG do Airflow para treino
+
+Branch `feature/airflow-dag-treino`, mesclada na `develop` (PR #5). Arquivo `airflow/dags/training_dag.py`, DAG `medical_triage_training`:
+
+```
+ingest_data → validate_data → train_model → evaluate_model → deploy_model
+```
+
+- A DAG só orquestra. A lógica de cada task fica em `training/dag_tasks.py`, reaproveitando `ingest`, `validate`, `train` e `evaluate`, pra poder testar sem o Airflow instalado.
+- Entre as tasks só passam caminhos e números (XCom). DataFrames e modelos ficam numa pasta de staging por execução, `data/processed/<run_id>/`, que está no `.gitignore`.
+- **Quality gate:** o `evaluate_model` só deixa publicar se o F1-macro no teste for ≥ `quality_gate.min_f1_macro` (0.50 no `config.yaml`; o modelo atual faz 0.558). Se reprovar, a task falha sem retry e o `deploy_model` não roda.
+- O `deploy_model` grava o Pipeline em `models/`, no mesmo arquivo que a API carrega. A parte de salvar artefatos virou `pipeline.save_artifacts()`, usada tanto pelo `run_pipeline()` quanto pela DAG.
+- Execução só manual (`schedule=None`), 2 retries com backoff, timeout de 30 min e callback de alerta em falha (por enquanto só registra no log).
+
+**Airflow local** (`airflow/docker-compose.yaml`): versão 2.10.4 com LocalExecutor (sem redis nem worker) e imagem própria (`airflow/Dockerfile`) com `scikit-learn==1.9.0`, a mesma versão da API, senão o `.joblib` gerado pela DAG não carrega na API. `numpy` e `pandas` ficaram fixos nas versões que a imagem já traz, pra não quebrar o pandas dela.
+
+```bash
+cd airflow
+docker compose up airflow-init   # só na primeira vez
+docker compose up -d             # UI em http://localhost:8080 (airflow / airflow)
+```
+
+No Mac/Linux, criar `airflow/.env` com `AIRFLOW_UID=<saída de id -u>`.
+
+**Testes:** 5 novos em `tests/test_dag_tasks.py`, com dataset sintético (não dependem do DVC, então rodam no CI): encadeamento das tasks, retornos cabendo no XCom, quality gate reprovado sem publicar o modelo e nome da pasta de staging válido no Windows. Total agora: 22 testes.
+
+---
+
+## 05/10/2026 - Fellipe
 
 Instrumentei a API com `prometheus_client`, validei as métricas localmente e estimei o limite de capacidade na conta. O `docker-compose.yml` com Prometheus e Grafana ainda **não** foi feito.
 
@@ -617,9 +673,6 @@ Alguns termos que me deram dúvida no código:
 | `a if cond else b`                         | Operador ternário do Python (o `cond ? a : b` do Java). Em `route.path if route else "unmatched"`, um `route` não nulo conta como verdadeiro.                                                                    |
 | `time.perf_counter()`                      | Relógio monotônico e de alta resolução, feito para medir **diferenças**. O `time.time()` pode ser ajustado pelo sistema operacional e pular. O valor absoluto não significa nada, só a subtração `fim - início`. |
 | `try/finally`                              | Garante que o registro das métricas aconteça mesmo se a requisição falhar. Sem ele, as falhas ficariam fora da contagem.                                                                                         |
-
-
-
 
 ### Buckets do histograma
 
