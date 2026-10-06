@@ -567,14 +567,11 @@ docker run -d --name api -p 8000:8000 medical-triage
 docker rm -f api
 ```
 
-
-
 ### Decisões
 
 - **CD fora do escopo.** Build + push no registry + deploy ficam como evolução planejada, descrita no README. O `build` do CI só **verifica** (não publica).
 - **Imagem como artefato adiada:** hoje não há quem a consuma.
 - **Proteção de branch** (`develop` e `main`: exigir PR e status checks) só depois que o `tests` estiver estável. Os checks se chamam pelo `name:` dos jobs ("Checagem dos testes" e "Build da imagem Docker").
-
 
 
 ### Para alinhar com o German
@@ -584,11 +581,7 @@ docker rm -f api
 
 ---
 
-
-
 ## 05/10/2026 - German
-
-
 
 ### DAG do Airflow para treino
 
@@ -615,4 +608,139 @@ docker compose up -d             # UI em http://localhost:8080 (airflow / airflo
 No Mac/Linux, criar `airflow/.env` com `AIRFLOW_UID=<saída de id -u>`.
 
 **Testes:** 5 novos em `tests/test_dag_tasks.py`, com dataset sintético (não dependem do DVC, então rodam no CI): encadeamento das tasks, retornos cabendo no XCom, quality gate reprovado sem publicar o modelo e nome da pasta de staging válido no Windows. Total agora: 22 testes.
+
+---
+
+## 05/10/2026 - Fellipe
+
+Instrumentei a API com `prometheus_client`, validei as métricas localmente e estimei o limite de capacidade na conta. O `docker-compose.yml` com Prometheus e Grafana ainda **não** foi feito.
+
+### Como o Prometheus funciona (modelo pull)
+
+A API não envia nada para ninguém: ela só expõe suas métricas em texto na rota `/metrics`. Quem vem buscar é o Prometheus (*scrape*), de tempos em tempos, e guarda tudo como séries temporais. O Grafana não coleta nada: ele consulta o Prometheus (linguagem PromQL) e desenha os gráficos.
+
+O `prometheus_client` é só uma biblioteca com as peças (tipos de métrica, `generate_latest()`, etc.). Ela **não instrumenta a API sozinha**: quem mede cada requisição é o middleware que escrevi.
+
+### Métricas criadas
+
+Arquivo `src/medical_triage/infra/api/metrics.py`, na camada de infra: FastAPI e `prometheus_client` são detalhes externos e não podem vazar para application/domain.
+
+
+| Métrica                         | Tipo      | Labels                     | Para quê                    |
+| ------------------------------- | --------- | -------------------------- | --------------------------- |
+| `http_requests_total`           | Counter   | `method`, `path`, `status` | Contar chamadas e erros     |
+| `http_request_duration_seconds` | Histogram | `path`                     | Medir o tempo e achar o p95 |
+
+
+Os três tipos que o Prometheus oferece:
+
+- **Counter**: só cresce (`.inc()`). Serve para contar. Para ver a taxa usa-se `rate()` na consulta.
+- **Gauge**: sobe e desce. Serve para um valor "de agora" (memória, itens em fila).
+- **Histogram**: guarda observações (`.observe()`) em faixas e gera `_bucket`, `_sum` e `_count`.
+
+Tempo é **Histogram, não Gauge**: o Gauge guarda só o último valor e eu perderia a distribuição, e sem ela não existe p95.
+
+Os nomes seguem a convenção da comunidade (`snake_case`, unidade no nome como `_seconds`, Counter terminando em `_total`). Não são obrigatórios, mas seguir facilita usar dashboards prontos.
+
+**Cardinalidade.** Cada combinação de valores de labels cria uma série separada. Se o `path` fosse a URL crua (com ids ou query string), o número de séries cresceria sem limite. Por isso uso o **template da rota** (`/predict`) e, para rotas que não existem, o valor fixo `"unmatched"`.
+
+### Middleware e rota `/metrics`
+
+O middleware mede o tempo com `time.perf_counter()` e registra as métricas dentro de um `try/finally`, para que requisições que lançam exceção também entrem na contagem (status padrão 500). O registro correto no FastAPI é:
+
+```python
+app.middleware("http")(metrics_middleware)
+```
+
+A forma `app.middleware(metrics_middleware)` que escrevi primeiro **não registra nada**: o argumento do decorator é o tipo (`"http"`), não a função.
+
+A rota devolve o texto no formato do Prometheus, sem aparecer no Swagger:
+
+```python
+@router.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+```
+
+Com `-> str` a rota devolveria JSON, e o Prometheus espera texto puro (`text/plain; version=0.0.4`).
+
+Alguns termos que me deram dúvida no código:
+
+
+| Termo                                      | O que é                                                                                                                                                                                                          |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Callable[[Request], Awaitable[Response]]` | Tipo de uma função que recebe um `Request` e devolve algo "esperável" (`await`) que resulta em `Response`. Em Java seria `Function<Request, CompletableFuture<Response>>`.                                       |
+| `a if cond else b`                         | Operador ternário do Python (o `cond ? a : b` do Java). Em `route.path if route else "unmatched"`, um `route` não nulo conta como verdadeiro.                                                                    |
+| `time.perf_counter()`                      | Relógio monotônico e de alta resolução, feito para medir **diferenças**. O `time.time()` pode ser ajustado pelo sistema operacional e pular. O valor absoluto não significa nada, só a subtração `fim - início`. |
+| `try/finally`                              | Garante que o registro das métricas aconteça mesmo se a requisição falhar. Sem ele, as falhas ficariam fora da contagem.                                                                                         |
+
+### Buckets do histograma
+
+Cada bucket é uma faixa "menor ou igual a" (`le`) e eles são **cumulativos**: `le="0.02"` conta tudo que levou até 20 ms, incluindo o que já estava nos buckets menores. Para saber quantas caíram numa faixa, subtraio o bucket anterior.
+
+Com os buckets padrão do Prometheus eu não tinha resolução na faixa de ~15 ms. Defini os meus à mão, de 1 ms a 1 s, mais densos entre 10 e 25 ms e com um bucket em **0,1 s**, que é o meu limite. A média sai de `_sum / _count`, e o p95 é uma **estimativa** por interpolação dentro do bucket (buckets estreitos dão mais precisão).
+
+Validação local: 10 chamadas ao `/predict` com o `scripts/benchmark.sh`.
+
+
+| Faixa (tempo no servidor) | Requisições                |
+| ------------------------- | -------------------------- |
+| até 10 ms                 | 0                          |
+| 10 a 15 ms                | 7                          |
+| 15 a 20 ms                | 2                          |
+| 25 a 50 ms                | 1 (a primeira, cold start) |
+
+
+Média no servidor: `0,1678 s / 10 ≈ 16,8 ms`. No cliente (`curl`) deu ≈ 17,7 ms, e a diferença é o custo de conexão e do próprio `curl`. A primeira requisição é mais lenta (cold start) e, com poucas amostras, ela domina o p95. Por isso o p95 deve ser lido em janelas (`[1m]`, `[5m]`) com tráfego contínuo.
+
+### Capacidade: até onde a API aguenta
+
+O `benchmark.sh` **não é teste de carga**: ele faz uma chamada de cada vez (concorrência 1) e só mede a latência isolada. Para saber o limite é preciso subir a concorrência em degraus e ver onde o p95 estoura. Ainda não rodei esse teste. Fiz a estimativa na conta, como hipótese para validar depois (ferramenta candidata: Locust).
+
+
+| Termo         | O que é                                                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Latência      | Tempo de uma requisição.                                                                                               |
+| Throughput    | Requisições atendidas por segundo (RPS).                                                                               |
+| Concorrência  | Quantas requisições estão em andamento ao mesmo tempo.                                                                 |
+| Saturação     | Ponto em que um recurso (CPU, threads) esgota: as requisições entram em fila, a latência sobe e o RPS para de crescer. |
+| Lei de Little | `concorrência = throughput × latência`. Liga as três grandezas acima.                                                  |
+| SLO           | A meta que eu aceitei: **p95 < 100 ms** e taxa de erro < 1% (o 1% é uma escolha minha, ainda a justificar).            |
+
+
+Uso o p95 e não a média porque a média esconde a cauda: com 19 requisições de 20 ms e uma de 600 ms a média dá ~49 ms, mas 5% dos usuários tiveram uma resposta péssima. E olho também os erros, porque uma API que quebra devolve 500 rapidinho e passaria no teste de latência.
+
+Modelo simples: o `/predict` ocupa o servidor ~16,8 ms por requisição, atendida uma de cada vez.
+
+- Throughput máximo ≈ 1000 ÷ 16,8 ≈ **60 req/s**. Esse teto **não depende** dos 100 ms, só do tempo que cada requisição ocupa o servidor.
+- Concorrência em que o p95 passa de 100 ms ≈ 100 ÷ 16,8 ≈ **6 clientes simultâneos** (confere com Little: 60 req/s × 0,1 s = 6). Errei nessa conta no início ao responder 62: misturei a taxa (req/s) com a concorrência (clientes).
+- 6 requisições em andamento **não são 6 usuários**: usuários reais pensam entre uma chamada e outra. A conta vale para o teste de carga, não para estimar quantos usuários a API aguenta.
+
+É só um modelo: o sklearn pode paralelizar, o FastAPI roda rotas `def` numa pool de threads e o uvicorn aceita mais workers, então a medição real pode ficar acima disso.
+
+### Decisões
+
+- Latência é Histogram, com buckets definidos à mão e um bucket exatamente no limite de 100 ms.
+- O `path` do label usa o template da rota, e rota inexistente vira `"unmatched"`.
+- Métricas de negócio (ex.: predições por classe) ficam para depois e entrariam por uma port na camada application, com um adaptador Prometheus em `infra/`.
+- Dentro do Docker Compose, `localhost` é o próprio container. O Prometheus vai usar o **nome do serviço** (`api:8000`) como alvo, pelo DNS interno da rede do Compose. Ainda vou confirmar isso na prática.
+
+
+
+### Para alinhar com o German
+
+1. **Baseline de latência:** o documentado antes (~0,27 ms) não bate com o que medi agora (~15 ms). Pode ser o modelo novo do tuning (289 árvores), Docker contra local ou diferença de unidade. Vou medir de novo no Docker com o modelo atual antes da comparação da Etapa 4.
+2. **Buckets:** foram escolhidos para a latência atual. Se o modelo mudar muito (mais árvores, outro algoritmo), é preciso revisar.
+
+---
+
+## Aberto
+
+1. `docker-compose.yml` com API + Prometheus + Grafana, `prometheus.yml` e datasource do Grafana por provisioning
+2. Dashboard simples (taxa de requisições, p95, contagem por status), com export do JSON e print
+3. Testes de `/metrics` e do middleware, e conferir que o `prometheus-client` está nas dependências de produção (o Dockerfile usa `uv sync --frozen --no-dev`)
+4. Decidir se o middleware ignora o próprio `/metrics` (hoje ele mede os scrapes do Prometheus, o que gera ruído) e se desligo as séries `_created`
+5. Refazer o baseline de latência no Docker e atualizar `docs/baseline_latency.md`
+6. Teste de carga para validar a hipótese de ~60 req/s e saturação com ~6 clientes
+7. Opcional: "aquecer" o modelo no `lifespan` para reduzir o cold start
 
