@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Medical Triage API", lifespan=lifespan)
 
 app.include_router(router)
-app.middleware('http')(metrics_middleware)
+app.middleware("http")(metrics_middleware)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

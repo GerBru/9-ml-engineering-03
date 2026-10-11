@@ -768,3 +768,5 @@ Pra ver o motivo de cada teste pulado: `uv run pytest -rs`.
 
 **Por que não fazer `dvc pull` no CI:** o CI precisaria de credencial do Google Drive como segredo do GitHub. O login OAuth que configuramos é de "app em teste" e expira a cada 7 dias, então quebraria toda semana. O certo seria uma service account com acesso à pasta, e ainda mexeria no `ci.yaml`. Não compensa: o que esses 2 testes cobrem (ingestão, treino, avaliação e o encadeamento) já é testado com dados sintéticos em `test_train.py` e `test_dag_tasks.py`. Os 2 testes com o dataset real ficam como testes de integração locais.
 
+**Formatação dos arquivos do Prometheus (Fé, só pra você saber):** o `ruff format --check` do CI falhava em `src/medical_triage/infra/api/metrics.py`, `routes.py` e `main.py`, e como ele roda antes do `pytest`, o passo de testes nem chegava a executar. Rodei `ruff format` nos três: só 3 linhas em branco antes de funções e `'http'` → `"http"` no `main.py`, nenhuma mudança de lógica.
+
