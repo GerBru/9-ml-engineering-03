@@ -11,6 +11,7 @@ router = APIRouter()
 
 ModelDep = Annotated[Pipeline, Depends(get_model)]
 
+
 @router.get("/health")
 def health_check() -> dict:
     return {"status": "ok"}
@@ -20,6 +21,7 @@ def health_check() -> dict:
 def predict(body: PredictRequest, model: ModelDep) -> PredictResponse:
     label = model.predict([body.text])[0]
     return PredictResponse(label=label)
+
 
 @router.get("/metrics", include_in_schema=False)
 def metrics() -> Response:

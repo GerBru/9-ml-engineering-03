@@ -27,14 +27,14 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 - [x] Modelo de classificação de texto (NLP): TF-IDF + Random Forest (`training/`, `models/random_forest_pipeline.joblib`)
 - [x] API REST com FastAPI (`src/medical_triage/`)
 - [x] Dockerfile funcional para o serviço de inferência
-- [x] Pipeline CI/CD básico com GitHub Actions (lint → test → build) (`.github/workflows/ci.yaml`) — o job de testes ainda falha nos 2 testes que dependem do dataset (DVC); CD fica fora do escopo
+- [x] Pipeline CI/CD básico com GitHub Actions (lint → test → build) (`.github/workflows/ci.yaml`); CD fica fora do escopo
 - [x] Script ou DAG Airflow simples para pipeline de treino/retreino (`airflow/dags/training_dag.py`)
 - [ ] Stack de monitoramento local: API + Prometheus + Grafana via Docker Compose
 - [x] Histórico de commits semântico e organizado
 
 ## Boas Práticas Obrigatórias
 
-- [x] CI/CD com pelo menos 2 automações (lint + testes) — `ruff check`, `ruff format --check` e `pytest` a cada push/PR; 2 dos 22 testes falham no CI por dependerem do dataset (DVC)
+- [x] CI/CD com pelo menos 2 automações (lint + testes) — `ruff check`, `ruff format --check` e `pytest` a cada push/PR; os 2 testes que usam o dataset real são pulados no CI (dados no DVC, fora do Git)
 - [ ] DAG Airflow funcional (ingestão → treino → salvamento do modelo) — DAG implementada (`ingest → validate → train → evaluate → deploy`, com quality gate); falta registrar uma execução completa no Airflow
 - [ ] Dashboard Grafana com pelo menos 3 painéis
 - [ ] Otimização de performance (ONNX, quantização ou pruning)
