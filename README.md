@@ -35,7 +35,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 ## Boas Práticas Obrigatórias
 
 - [x] CI/CD com pelo menos 2 automações (lint + testes) — `ruff check`, `ruff format --check` e `pytest` a cada push/PR; os 2 testes que usam o dataset real são pulados no CI (dados no DVC, fora do Git)
-- [ ] DAG Airflow funcional (ingestão → treino → salvamento do modelo) — DAG implementada (`ingest → validate → train → evaluate → deploy`, com quality gate); falta registrar uma execução completa no Airflow
+- [x] DAG Airflow funcional (ingestão → treino → salvamento do modelo) — `ingest → validate → train → evaluate → deploy`, com quality gate; executada com sucesso no Airflow 2.10.4 via Docker Compose ([`docs/airflow_runs.jpeg`](docs/airflow_runs.jpeg))
 - [ ] Dashboard Grafana com pelo menos 3 painéis
 - [ ] Otimização de performance (ONNX, quantização ou pruning)
 
@@ -54,7 +54,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 
 ## Etapa 3 — Monitoramento e Observabilidade
 
-- [ ] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas)
+- [x] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas) — `src/medical_triage/infra/api/metrics.py` (`http_requests_total`, `http_request_duration_seconds`), exposto em `/metrics`
 - [ ] `docker-compose.yml` com API + Prometheus + Grafana
 - [ ] Dashboard Grafana configurado e exibindo as métricas
 

@@ -770,3 +770,30 @@ Pra ver o motivo de cada teste pulado: `uv run pytest -rs`.
 
 **Formatação dos arquivos do Prometheus (Fé, só pra você saber):** o `ruff format --check` do CI falhava em `src/medical_triage/infra/api/metrics.py`, `routes.py` e `main.py`, e como ele roda antes do `pytest`, o passo de testes nem chegava a executar. Rodei `ruff format` nos três: só 3 linhas em branco antes de funções e `'http'` → `"http"` no `main.py`, nenhuma mudança de lógica.
 
+### DAG quebrada no Airflow do Windows: leitura lenta (PR #8)
+
+Primeira vez que subi o Airflow via Docker, no computador Windows. A UI mostrou `Broken DAG: [/opt/airflow/dags/training_dag.py]` e a DAG não aparecia. Não era erro de código: dentro do container, `import training.dag_tasks` funcionava e o `airflow dags list-import-errors` já não mostrava nada pouco depois.
+
+**Causa:** tempo. O Airflow corta a leitura de cada arquivo de DAG em 30 s (`dagbag_import_timeout`) e relê o arquivo a cada 30 s e no início de cada task. A DAG fazia `from training import dag_tasks` no topo, o que carrega `pandas`, `scikit-learn` e `scipy` em toda leitura. No Windows isso levou ~19 s com cache e passou dos 30 s na primeira leitura, a fria.
+
+**Correção** (branch `fix/airflow-dag-import-lento`):
+- `airflow/dags/training_dag.py`: cada task importa o `training.dag_tasks` dentro da própria função, só quando executa. O arquivo da DAG fica leve.
+- `airflow/docker-compose.yaml`: `AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT=120` e `AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT=180` (o segundo precisa ser maior que o primeiro), como margem.
+
+| Leitura do arquivo da DAG (medido no Mac) | Antes | Depois |
+| --- | --- | --- |
+| Tempo | 7 s na primeira, ~1,2 s depois | 0,06 s |
+| Bibliotecas pesadas carregadas | `pandas`, `sklearn`, `scipy` | nenhuma |
+
+O comportamento da DAG não mudou: mesmas 5 tasks, mesmos retries (o `evaluate_model` continua sem retry), mesmas métricas no `airflow dags test`.
+
+Não precisa reconstruir a imagem: a pasta `dags/` é montada no container e o Airflow pega o arquivo novo sozinho. Pras variáveis novas do compose, basta `docker compose up -d`.
+
+### DAG rodando no Airflow via Docker
+
+Com isso, a DAG rodou de ponta a ponta no Airflow 2.10.4 via Docker Compose, no Windows: **2 execuções, as 2 com sucesso**, as 5 tasks verdes em cada uma. Print em `docs/airflow_runs.jpeg`. É a evidência do item "DAG Airflow funcional" do Tech Challenge (Boas Práticas Obrigatórias e critério Orquestração, 15%), que marquei no checklist do README.
+
+A execução mais longa levou 3 min 50 s, bem mais que no Mac (segundos). Boa parte disso é o mesmo custo de importar as bibliotecas no início de cada task, agravado pela pasta do Windows montada no Docker.
+
+No README também marquei "API instrumentada com `prometheus_client`", que estava feito desde o PR #6 do Fé (`metrics.py`, com `http_requests_total` e `http_request_duration_seconds`) mas tinha ficado desmarcado.
+
