@@ -25,6 +25,11 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Limite pra importar cada arquivo de DAG (padrão 30 s) e pro processo que
+    # faz essa leitura (padrão 50 s; precisa ser maior que o primeiro). Margem
+    # pra máquinas lentas: no Windows, a primeira leitura passou dos 30 s.
+    AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: '120'
+    AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: '180'
     # Deixa a DAG fazer "from training import dag_tasks".
     PYTHONPATH: /opt/airflow/project
   volumes:
