@@ -12,8 +12,6 @@ from datetime import timedelta
 import pendulum
 from airflow.decorators import dag, task
 
-from training import dag_tasks
-
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +38,49 @@ default_args = {
 }
 
 
+# O import de training.dag_tasks fica dentro de cada task, e não no topo do
+# arquivo: ele carrega pandas, scikit-learn e scipy, e o Airflow relê este
+# arquivo a cada 30 s e no início de cada task. Com o import no topo, cada
+# leitura levava ~20 s no Windows e estourava o limite de 30 s do Airflow.
+
+
+@task(task_id="ingest_data")
+def ingest_data(run_id: str) -> str:
+    from training import dag_tasks
+
+    return dag_tasks.ingest_data(run_id)
+
+
+@task(task_id="validate_data")
+def validate_data(staging_dir: str) -> str:
+    from training import dag_tasks
+
+    return dag_tasks.validate_staged_data(staging_dir)
+
+
+@task(task_id="train_model")
+def train_model(staging_dir: str) -> str:
+    from training import dag_tasks
+
+    return dag_tasks.train_staged_model(staging_dir)
+
+
+# Reprovar no quality gate não é falha transitória: tentar de novo dá o mesmo
+# resultado, então essa task não tem retry.
+@task(task_id="evaluate_model", retries=0)
+def evaluate_model(staging_dir: str) -> dict:
+    from training import dag_tasks
+
+    return dag_tasks.evaluate_staged_model(staging_dir)
+
+
+@task(task_id="deploy_model")
+def deploy_model(resultado: dict) -> str:
+    from training import dag_tasks
+
+    return dag_tasks.deploy_model(resultado)
+
+
 @dag(
     dag_id="medical_triage_training",
     description="Treina, avalia e publica o classificador de laudos médicos",
@@ -51,19 +92,11 @@ default_args = {
     doc_md=__doc__,
 )
 def medical_triage_training():
-    staging_dir = task(task_id="ingest_data")(dag_tasks.ingest_data)(
-        run_id="{{ run_id }}"
-    )
-    staging_dir = task(task_id="validate_data")(dag_tasks.validate_staged_data)(
-        staging_dir
-    )
-    staging_dir = task(task_id="train_model")(dag_tasks.train_staged_model)(staging_dir)
-    # Reprovar no quality gate não é falha transitória: tentar de novo dá o
-    # mesmo resultado, então essa task não tem retry.
-    resultado = task(task_id="evaluate_model", retries=0)(
-        dag_tasks.evaluate_staged_model
-    )(staging_dir)
-    task(task_id="deploy_model")(dag_tasks.deploy_model)(resultado)
+    staging_dir = ingest_data(run_id="{{ run_id }}")
+    staging_dir = validate_data(staging_dir)
+    staging_dir = train_model(staging_dir)
+    resultado = evaluate_model(staging_dir)
+    deploy_model(resultado)
 
 
 medical_triage_training()
