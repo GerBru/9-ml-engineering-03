@@ -1,8 +1,24 @@
 # tests/test_pipeline.py
 
+import pytest
+
 import training.pipeline as pipeline_module
+from training.ingest import DATA_DIR
+
+# Os CSVs ficam no DVC, fora do Git: no CI (sem dvc pull) eles não existem.
+ARQUIVOS_DATASET = (
+    "medical_tc_train.csv",
+    "medical_tc_test.csv",
+    "medical_tc_labels.csv",
+)
+
+requires_dataset = pytest.mark.skipif(
+    not all((DATA_DIR / nome).exists() for nome in ARQUIVOS_DATASET),
+    reason="dataset não está em data/raw/ (versionado no DVC: rode `uv run dvc pull`)",
+)
 
 
+@requires_dataset
 def test_pipeline_end_to_end_roda_e_retorna_metricas(tmp_path, monkeypatch):
     """Integração: roda o pipeline completo com o dataset real, salvando
     os artefatos numa pasta temporária (não polui models/ de verdade)."""

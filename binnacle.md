@@ -744,3 +744,27 @@ Modelo simples: o `/predict` ocupa o servidor ~16,8 ms por requisição, atendid
 6. Teste de carga para validar a hipótese de ~60 req/s e saturação com ~6 clientes
 7. Opcional: "aquecer" o modelo no `lifespan` para reduzir o cold start
 
+---
+
+## 11/10/2026 - German
+
+### Testes que dependem do dataset pulados no CI
+
+Branch `fix/testes-dataset-ci`. Dois testes falhavam no GitHub Actions com `FileNotFoundError`:
+
+- `tests/test_data.py::test_load_data_retorna_train_test_e_label_map`
+- `tests/test_pipeline.py::test_pipeline_end_to_end_roda_e_retorna_metricas`
+
+Os dois leem os CSVs de `data/raw/`. Os CSVs estão no DVC: o Git guarda só os ponteiros `.dvc`, e o CI faz `git checkout` mas nunca `dvc pull`, então os arquivos não existem lá. Reproduzi isso numa cópia limpa da `develop` (2 failed, 20 passed).
+
+**O que fiz:** nos dois arquivos, um marcador `requires_dataset` (`pytest.mark.skipif`) que pula o teste quando falta algum dos 3 CSVs em `data/raw/`. O caminho vem do `DATA_DIR` do `training/ingest.py`, então acompanha se um dia mudar. Só esses 2 testes levam o marcador; as validações com dados sintéticos continuam rodando sempre.
+
+| Onde | Antes | Depois |
+| --- | --- | --- |
+| CI (sem os CSVs) | 2 failed, 20 passed | 20 passed, 2 skipped |
+| Máquina com os CSVs | 22 passed | 22 passed |
+
+Pra ver o motivo de cada teste pulado: `uv run pytest -rs`.
+
+**Por que não fazer `dvc pull` no CI:** o CI precisaria de credencial do Google Drive como segredo do GitHub. O login OAuth que configuramos é de "app em teste" e expira a cada 7 dias, então quebraria toda semana. O certo seria uma service account com acesso à pasta, e ainda mexeria no `ci.yaml`. Não compensa: o que esses 2 testes cobrem (ingestão, treino, avaliação e o encadeamento) já é testado com dados sintéticos em `test_train.py` e `test_dag_tasks.py`. Os 2 testes com o dataset real ficam como testes de integração locais.
+
