@@ -14,6 +14,7 @@ import yaml
 from sklearn.pipeline import Pipeline
 
 from training.evaluate import evaluate_model
+from training.export_onnx import check_parity, export_onnx
 from training.ingest import load_data
 from training.train import train_model
 from training.validate import validate_data
@@ -33,26 +34,37 @@ def load_config() -> dict:
     return yaml.safe_load(CONFIG_PATH.read_text())
 
 
-def save_artifacts(vetorizador, modelo, metricas: dict, config: dict) -> Path:
-    """Salva vetorizador, classificador, Pipeline empacotado e métricas em models/.
+def save_artifacts(
+    vetorizador, modelo, metricas: dict, config: dict, textos_teste: list[str]
+) -> Path:
+    """Salva vetorizador, classificador, Pipeline (.joblib e .onnx) e métricas.
 
     Usado tanto pelo run_pipeline() quanto pela task deploy_model da DAG do
     Airflow. Sempre sobrescreve os arquivos, então rodar de novo é seguro.
+
+    O .onnx é gerado e conferido contra o scikit-learn (textos_teste) ANTES de
+    gravar qualquer arquivo: se a paridade reprovar, nada em models/ muda.
 
     Returns:
         Caminho do Pipeline empacotado (o arquivo que a API carrega).
     """
     output = config["output"]
-    MODELS_DIR.mkdir(exist_ok=True)
-
-    joblib.dump(vetorizador, MODELS_DIR / output["vectorizer_filename"])
-    joblib.dump(modelo, MODELS_DIR / output["classifier_filename"])
 
     # Empacota os dois componentes já treinados num Pipeline único, pronto
     # pro contrato que a API espera (joblib.load(path).predict([texto])).
-    pipeline_path = MODELS_DIR / output["pipeline_filename"]
     pipeline_sklearn = Pipeline([("tfidf", vetorizador), ("clf", modelo)])
+
+    onnx_bytes = export_onnx(pipeline_sklearn)
+    metricas["onnx_parity"] = check_parity(
+        pipeline_sklearn, onnx_bytes, textos_teste, config["onnx"]["min_parity"]
+    )
+
+    MODELS_DIR.mkdir(exist_ok=True)
+    joblib.dump(vetorizador, MODELS_DIR / output["vectorizer_filename"])
+    joblib.dump(modelo, MODELS_DIR / output["classifier_filename"])
+    pipeline_path = MODELS_DIR / output["pipeline_filename"]
     joblib.dump(pipeline_sklearn, pipeline_path)
+    (MODELS_DIR / output["onnx_filename"]).write_bytes(onnx_bytes)
 
     (MODELS_DIR / output["metrics_filename"]).write_text(
         json.dumps(metricas, indent=2, ensure_ascii=False)
@@ -82,7 +94,9 @@ def run_pipeline() -> dict:
     metricas["n_treino"] = len(train_df)
 
     # 5. Deploy (salvar artefatos localmente)
-    save_artifacts(vetorizador, modelo, metricas, config)
+    save_artifacts(
+        vetorizador, modelo, metricas, config, test_df["medical_abstract"].tolist()
+    )
 
     logger.info(
         f"🎉 Pipeline concluído em {time.time() - inicio:.1f}s | "

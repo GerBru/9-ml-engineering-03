@@ -37,7 +37,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 - [x] CI/CD com pelo menos 2 automações (lint + testes) — `ruff check`, `ruff format --check` e `pytest` a cada push/PR; os 2 testes que usam o dataset real são pulados no CI (dados no DVC, fora do Git)
 - [x] DAG Airflow funcional (ingestão → treino → salvamento do modelo) — `ingest → validate → train → evaluate → deploy`, com quality gate; executada com sucesso no Airflow 2.10.4 via Docker Compose ([`docs/airflow_runs.jpeg`](docs/airflow_runs.jpeg))
 - [ ] Dashboard Grafana com pelo menos 3 painéis
-- [ ] Otimização de performance (ONNX, quantização ou pruning)
+- [x] Otimização de performance (ONNX, quantização ou pruning) — Pipeline exportado para ONNX e executado com ONNX Runtime ([`docs/otimizacao_onnx.md`](docs/otimizacao_onnx.md))
 
 ## Etapa 1 — Decisão Arquitetural e API Inicial
 
@@ -61,8 +61,8 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 ## Etapa 4 — Otimização de Latência e Entrega
 
 - [x] Classificador de texto treinado (TF-IDF + Random Forest)
-- [ ] Técnica de otimização de latência aplicada (ex.: ONNX, quantização ou pruning)
-- [ ] Comparação de latência: modelo original vs. otimizado
+- [x] Técnica de otimização de latência aplicada (ex.: ONNX, quantização ou pruning) — ONNX Runtime (`models/random_forest_pipeline.onnx`, 100% de paridade com o original no conjunto de teste)
+- [x] Comparação de latência: modelo original vs. otimizado — p50 de 13,5 ms (scikit-learn) para 0,050 ms (ONNX) por laudo, só a inferência ([`docs/otimizacao_onnx.md`](docs/otimizacao_onnx.md))
 - [ ] Vídeo STAR gravado (≤ 5 minutos)
 
 ## Dataset

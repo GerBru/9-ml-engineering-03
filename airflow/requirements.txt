@@ -9,3 +9,8 @@ scikit-learn==1.9.0
 # novo, que exige numpy 2, troca o numpy da imagem e quebra o pandas 2.1.4.
 numpy==1.26.4
 pandas==2.1.4
+
+# Exportação para ONNX na task deploy_model (skl2onnx converte, onnxruntime
+# confere a paridade). Versões testadas junto com o numpy 1.26.4 acima.
+skl2onnx==1.20.0
+onnxruntime==1.30.0

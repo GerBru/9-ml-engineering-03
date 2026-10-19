@@ -48,10 +48,12 @@ def _config(min_f1_macro: float) -> dict:
             "random_state": 42,
         },
         "quality_gate": {"min_f1_macro": min_f1_macro},
+        "onnx": {"min_parity": 0.99},
         "output": {
             "vectorizer_filename": "tfidf_vectorizer.joblib",
             "classifier_filename": "random_forest_classifier.joblib",
             "pipeline_filename": "random_forest_pipeline.joblib",
+            "onnx_filename": "random_forest_pipeline.onnx",
             "metrics_filename": "random_forest_metrics.json",
         },
     }
@@ -86,6 +88,7 @@ def test_tasks_encadeadas_publicam_o_modelo(ambiente, monkeypatch):
 
     assert pipeline_path.endswith("random_forest_pipeline.joblib")
     assert (ambiente / "models" / "random_forest_pipeline.joblib").exists()
+    assert (ambiente / "models" / "random_forest_pipeline.onnx").exists()
     assert (ambiente / "models" / "random_forest_metrics.json").exists()
 
 
