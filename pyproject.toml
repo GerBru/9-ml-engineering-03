@@ -43,6 +43,9 @@ packages = ["src/medical_triage"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+# Só procura testes em tests/: sem isso o pytest varre o projeto inteiro e, no
+# Windows, quebra no atalho Linux que o Airflow cria em airflow/logs/.
+testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["training", "src/medical_triage"]
