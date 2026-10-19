@@ -30,6 +30,8 @@ def test_pipeline_end_to_end_roda_e_retorna_metricas(tmp_path, monkeypatch):
     assert (tmp_path / config["output"]["pipeline_filename"]).exists()
     assert (tmp_path / config["output"]["vectorizer_filename"]).exists()
     assert (tmp_path / config["output"]["classifier_filename"]).exists()
+    assert (tmp_path / config["output"]["onnx_filename"]).exists()
+    assert metricas["onnx_parity"] >= config["onnx"]["min_parity"]
 
     assert 0.0 <= metricas["accuracy"] <= 1.0
     assert 0.0 <= metricas["f1_macro"] <= 1.0

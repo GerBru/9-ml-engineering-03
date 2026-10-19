@@ -797,3 +797,36 @@ A execução mais longa levou 3 min 50 s, bem mais que no Mac (segundos). Boa pa
 
 No README também marquei "API instrumentada com `prometheus_client`", que estava feito desde o PR #6 do Fé (`metrics.py`, com `http_requests_total` e `http_request_duration_seconds`) mas tinha ficado desmarcado.
 
+---
+
+## 19/10/2026 - German
+
+### Otimização de latência com ONNX (Etapa 4)
+
+Branch `feature/onnx-otimizacao-latencia`. Detalhes e tabela completa em `docs/otimizacao_onnx.md`.
+
+O Pipeline (TF-IDF + Random Forest) é exportado para ONNX e executado com o ONNX Runtime. Escolhi ONNX e não quantização porque a quantização da Etapa 6 (Aula 04) age sobre pesos de redes neurais, e o Random Forest não tem pesos. O ONNX se aplica ao modelo atual sem retreinar.
+
+- `training/export_onnx.py` (novo): converte com `skl2onnx` (o TF-IDF vai junto no grafo, então o modelo recebe texto cru e devolve a classe em texto, igual ao `.joblib`) e confere a **paridade** com o scikit-learn.
+- `pipeline.save_artifacts()` agora gera o `models/random_forest_pipeline.onnx` junto com o `.joblib`, então o `pipeline.py` e a task `deploy_model` da DAG publicam os dois. O ONNX é conferido **antes** de gravar qualquer arquivo: se bater em menos de 99% (`onnx.min_parity` no `config.yaml`), nada em `models/` muda. Hoje bate 100% (2.888/2.888).
+- `training/benchmark_onnx.py` (novo): mede a latência de um laudo por vez e grava `docs/latency_benchmark.json`.
+
+| Variante (só a inferência, 1 laudo) | p50 | p99 |
+| --- | --- | --- |
+| scikit-learn como publicado (`n_jobs=-1`) | 13,50 ms | 14,69 ms |
+| scikit-learn `n_jobs=1` | 5,49 ms | 5,82 ms |
+| **ONNX Runtime** | **0,050 ms** | **0,079 ms** |
+
+Ganho de 268x no p50 sobre o publicado (109x sobre `n_jobs=1`). O `.onnx` tem 13,9 MB (o `.joblib`, 22,5 MB).
+
+**Dependências:** `skl2onnx` e `onnxruntime` no grupo `training` do `pyproject.toml`, e fixados no `airflow/requirements.txt` (`skl2onnx==1.20.0`, `onnxruntime==1.30.0`). Testei a imagem do Airflow de novo: com o numpy 1.26.4 da imagem o pip escolhe o `onnx 1.22.0`, a DAG roda inteira e publica o `.onnx` com 100% de paridade, e esse `.onnx` funciona no ambiente com numpy 2. A imagem do Airflow precisa ser reconstruída (`docker compose build`) por causa do `requirements.txt`.
+
+**`uv.lock`:** não dá pra gerar nesta máquina (a rede da empresa bloqueia o PyPI público e o `uv` grava o índice interno). Fica pra gerar no Windows antes do PR, só ele num commit.
+
+**Testes:** 4 novos em `tests/test_export_onnx.py` (modelo sintético, rodam no CI): predições iguais ao scikit-learn, rótulos em texto, paridade aprovada e paridade reprovada. `test_dag_tasks.py` e `test_pipeline.py` passaram a conferir o `.onnx` publicado.
+
+### Pro Fellipe
+
+1. **Baseline de latência (o ponto que você deixou pra alinhar comigo):** os ~15 ms que você mediu na API são quase todos do modelo: só a inferência leva 13,5 ms, por causa do `n_jobs=-1` do Random Forest. Os ~0,27 ms antigos devem ser do teu modelo sintético (`classifier.joblib`, Regressão Logística): medi agora e ele faz 0,18 ms.
+2. **Servir o ONNX na API (decisão tua):** o `.onnx` já está em `models/`. Precisaria mover o `onnxruntime` para as `dependencies` de produção e criar um adaptador em `infra/ml/` que carregue o `.onnx` (a entrada se chama `text`, formato `[n, 1]`; a saída `label` já vem em texto). Se servir, os buckets do histograma vão precisar de faixas abaixo de 1 ms.
+

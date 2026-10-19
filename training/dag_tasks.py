@@ -105,12 +105,17 @@ def evaluate_staged_model(staging_dir: str) -> dict:
 
 
 def deploy_model(resultado: dict) -> str:
-    """Publica o modelo aprovado em models/ (sobrescreve o anterior)."""
+    """Publica o modelo aprovado em models/ (.joblib e .onnx), sobrescrevendo.
+
+    Raises:
+        ValueError: se o .onnx não bater com o scikit-learn no conjunto de teste.
+    """
     staging = Path(resultado["staging_dir"])
     pipeline_path = pipeline.save_artifacts(
         joblib.load(staging / VECTORIZER_FILE),
         joblib.load(staging / CLASSIFIER_FILE),
         joblib.load(staging / METRICS_FILE),
         pipeline.load_config(),
+        joblib.load(staging / TEST_FILE)["medical_abstract"].tolist(),
     )
     return str(pipeline_path)
