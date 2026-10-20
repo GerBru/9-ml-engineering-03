@@ -681,6 +681,59 @@ Modelo simples: o `/predict` ocupa o servidor ~16,8 ms por requisição, atendid
 
 ---
 
+## 11/10/2026 - German
+
+### Testes que dependem do dataset pulados no CI
+
+Branch `fix/testes-dataset-ci`. Dois testes falhavam no GitHub Actions com `FileNotFoundError`:
+
+- `tests/test_data.py::test_load_data_retorna_train_test_e_label_map`
+- `tests/test_pipeline.py::test_pipeline_end_to_end_roda_e_retorna_metricas`
+
+Os dois leem os CSVs de `data/raw/`. Os CSVs estão no DVC: o Git guarda só os ponteiros `.dvc`, e o CI faz `git checkout` mas nunca `dvc pull`, então os arquivos não existem lá. Reproduzi isso numa cópia limpa da `develop` (2 failed, 20 passed).
+
+**O que fiz:** nos dois arquivos, um marcador `requires_dataset` (`pytest.mark.skipif`) que pula o teste quando falta algum dos 3 CSVs em `data/raw/`. O caminho vem do `DATA_DIR` do `training/ingest.py`, então acompanha se um dia mudar. Só esses 2 testes levam o marcador; as validações com dados sintéticos continuam rodando sempre.
+
+| Onde | Antes | Depois |
+| --- | --- | --- |
+| CI (sem os CSVs) | 2 failed, 20 passed | 20 passed, 2 skipped |
+| Máquina com os CSVs | 22 passed | 22 passed |
+
+Pra ver o motivo de cada teste pulado: `uv run pytest -rs`.
+
+**Por que não fazer `dvc pull` no CI:** o CI precisaria de credencial do Google Drive como segredo do GitHub. O login OAuth que configuramos é de "app em teste" e expira a cada 7 dias, então quebraria toda semana. O certo seria uma service account com acesso à pasta, e ainda mexeria no `ci.yaml`. Não compensa: o que esses 2 testes cobrem (ingestão, treino, avaliação e o encadeamento) já é testado com dados sintéticos em `test_train.py` e `test_dag_tasks.py`. Os 2 testes com o dataset real ficam como testes de integração locais.
+
+**Formatação dos arquivos do Prometheus (Fé, só pra você saber):** o `ruff format --check` do CI falhava em `src/medical_triage/infra/api/metrics.py`, `routes.py` e `main.py`, e como ele roda antes do `pytest`, o passo de testes nem chegava a executar. Rodei `ruff format` nos três: só 3 linhas em branco antes de funções e `'http'` → `"http"` no `main.py`, nenhuma mudança de lógica.
+
+### DAG quebrada no Airflow do Windows: leitura lenta (PR #8)
+
+Primeira vez que subi o Airflow via Docker, no computador Windows. A UI mostrou `Broken DAG: [/opt/airflow/dags/training_dag.py]` e a DAG não aparecia. Não era erro de código: dentro do container, `import training.dag_tasks` funcionava e o `airflow dags list-import-errors` já não mostrava nada pouco depois.
+
+**Causa:** tempo. O Airflow corta a leitura de cada arquivo de DAG em 30 s (`dagbag_import_timeout`) e relê o arquivo a cada 30 s e no início de cada task. A DAG fazia `from training import dag_tasks` no topo, o que carrega `pandas`, `scikit-learn` e `scipy` em toda leitura. No Windows isso levou ~19 s com cache e passou dos 30 s na primeira leitura, a fria.
+
+**Correção** (branch `fix/airflow-dag-import-lento`):
+- `airflow/dags/training_dag.py`: cada task importa o `training.dag_tasks` dentro da própria função, só quando executa. O arquivo da DAG fica leve.
+- `airflow/docker-compose.yaml`: `AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT=120` e `AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT=180` (o segundo precisa ser maior que o primeiro), como margem.
+
+| Leitura do arquivo da DAG (medido no Mac) | Antes | Depois |
+| --- | --- | --- |
+| Tempo | 7 s na primeira, ~1,2 s depois | 0,06 s |
+| Bibliotecas pesadas carregadas | `pandas`, `sklearn`, `scipy` | nenhuma |
+
+O comportamento da DAG não mudou: mesmas 5 tasks, mesmos retries (o `evaluate_model` continua sem retry), mesmas métricas no `airflow dags test`.
+
+Não precisa reconstruir a imagem: a pasta `dags/` é montada no container e o Airflow pega o arquivo novo sozinho. Pras variáveis novas do compose, basta `docker compose up -d`.
+
+### DAG rodando no Airflow via Docker
+
+Com isso, a DAG rodou de ponta a ponta no Airflow 2.10.4 via Docker Compose, no Windows: **2 execuções, as 2 com sucesso**, as 5 tasks verdes em cada uma. Print em `docs/airflow_runs.jpeg`. É a evidência do item "DAG Airflow funcional" do Tech Challenge (Boas Práticas Obrigatórias e critério Orquestração, 15%), que marquei no checklist do README.
+
+A execução mais longa levou 3 min 50 s, bem mais que no Mac (segundos). Boa parte disso é o mesmo custo de importar as bibliotecas no início de cada task, agravado pela pasta do Windows montada no Docker.
+
+No README também marquei "API instrumentada com `prometheus_client`", que estava feito desde o PR #6 do Fé (`metrics.py`, com `http_requests_total` e `http_request_duration_seconds`) mas tinha ficado desmarcado.
+
+---
+
 ## 15/10/2026 - Fellipe
 
 Duas frentes da Etapa 3: um teste de carga rápido, que validou a hipótese de capacidade que eu tinha anotado em 05/10, e a stack de monitoramento no `docker-compose.yml` (API + Prometheus + Grafana) com o `prometheus.yml`. O Grafana ainda não tem datasource nem dashboard.
@@ -945,3 +998,37 @@ Validação: `docker compose down -v` + `docker compose up -d`. O datasource e o
 8. Testes de `/metrics` e do middleware; confirmar o `prometheus-client` nas dependências de produção (o Dockerfile usa `--no-dev`).
 9. Refazer o baseline de latência no Docker e atualizar `docs/baseline_latency.md`.
 
+---
+
+## 19/10/2026 - German
+
+### Otimização de latência com ONNX (Etapa 4)
+
+Branch `feature/onnx-otimizacao-latencia`. Detalhes e tabela completa em `docs/otimizacao_onnx.md`.
+
+O Pipeline (TF-IDF + Random Forest) é exportado para ONNX e executado com o ONNX Runtime. Escolhi ONNX e não quantização porque a quantização da Etapa 6 (Aula 04) age sobre pesos de redes neurais, e o Random Forest não tem pesos. O ONNX se aplica ao modelo atual sem retreinar.
+
+- `training/export_onnx.py` (novo): converte com `skl2onnx` (o TF-IDF vai junto no grafo, então o modelo recebe texto cru e devolve a classe em texto, igual ao `.joblib`) e confere a **paridade** com o scikit-learn.
+- `pipeline.save_artifacts()` agora gera o `models/random_forest_pipeline.onnx` junto com o `.joblib`, então o `pipeline.py` e a task `deploy_model` da DAG publicam os dois. O ONNX é conferido **antes** de gravar qualquer arquivo: se bater em menos de 99% (`onnx.min_parity` no `config.yaml`), nada em `models/` muda. Hoje bate 100% (2.888/2.888).
+- `training/benchmark_onnx.py` (novo): mede a latência de um laudo por vez e grava `docs/latency_benchmark.json`.
+
+| Variante (só a inferência, 1 laudo) | p50 | p99 |
+| --- | --- | --- |
+| scikit-learn como publicado (`n_jobs=-1`) | 13,50 ms | 14,69 ms |
+| scikit-learn `n_jobs=1` | 5,49 ms | 5,82 ms |
+| **ONNX Runtime** | **0,050 ms** | **0,079 ms** |
+
+Ganho de 268x no p50 sobre o publicado (109x sobre `n_jobs=1`). O `.onnx` tem 13,9 MB (o `.joblib`, 22,5 MB).
+
+**Dependências:** `skl2onnx` e `onnxruntime` no grupo `training` do `pyproject.toml`, e fixados no `airflow/requirements.txt` (`skl2onnx==1.20.0`, `onnxruntime==1.30.0`). Testei a imagem do Airflow de novo: com o numpy 1.26.4 da imagem o pip escolhe o `onnx 1.22.0`, a DAG roda inteira e publica o `.onnx` com 100% de paridade, e esse `.onnx` funciona no ambiente com numpy 2. A imagem do Airflow precisa ser reconstruída (`docker compose build`) por causa do `requirements.txt`.
+
+**`uv.lock`:** não dá pra gerar nesta máquina (a rede da empresa bloqueia o PyPI público e o `uv` grava o índice interno). Fica pra gerar no Windows antes do PR, só ele num commit.
+
+**Testes:** 4 novos em `tests/test_export_onnx.py` (modelo sintético, rodam no CI): predições iguais ao scikit-learn, rótulos em texto, paridade aprovada e paridade reprovada. `test_dag_tasks.py` e `test_pipeline.py` passaram a conferir o `.onnx` publicado.
+
+### Pro Fellipe
+
+1. **Baseline de latência (o ponto que você deixou pra alinhar comigo):** os ~15 ms que você mediu na API são quase todos do modelo: só a inferência leva 13,5 ms, por causa do `n_jobs=-1` do Random Forest. Os ~0,27 ms antigos devem ser do teu modelo sintético (`classifier.joblib`, Regressão Logística): medi agora e ele faz 0,18 ms.
+2. **Servir o ONNX na API (decisão tua):** o `.onnx` já está em `models/`. Precisaria mover o `onnxruntime` para as `dependencies` de produção e criar um adaptador em `infra/ml/` que carregue o `.onnx` (a entrada se chama `text`, formato `[n, 1]`; a saída `label` já vem em texto). Se servir, os buckets do histograma vão precisar de faixas abaixo de 1 ms.
+
+---

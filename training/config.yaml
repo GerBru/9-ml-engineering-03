@@ -17,8 +17,16 @@ model:
 quality_gate:
   min_f1_macro: 0.50
 
+# Exportação para ONNX: o .onnx só é publicado se as predições dele baterem com
+# as do scikit-learn em pelo menos esta fração do conjunto de teste. Não exijo
+# 1.0 porque o ONNX calcula em float32, e em casos de empate isso pode virar a
+# classe. O modelo atual bate 100%.
+onnx:
+  min_parity: 0.99
+
 output:
   vectorizer_filename: "tfidf_vectorizer.joblib"
   classifier_filename: "random_forest_classifier.joblib"
   pipeline_filename: "random_forest_pipeline.joblib"
+  onnx_filename: "random_forest_pipeline.onnx"
   metrics_filename: "random_forest_metrics.json"

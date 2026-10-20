@@ -3,12 +3,26 @@
 import pandas as pd
 import pytest
 
-from training.ingest import load_data
+from training.ingest import DATA_DIR, load_data
 from training.validate import validate_data
+
+# Os CSVs ficam no DVC, fora do Git: no CI (sem dvc pull) eles não existem.
+# Os testes que leem o dataset real são pulados quando falta algum arquivo.
+ARQUIVOS_DATASET = (
+    "medical_tc_train.csv",
+    "medical_tc_test.csv",
+    "medical_tc_labels.csv",
+)
+
+requires_dataset = pytest.mark.skipif(
+    not all((DATA_DIR / nome).exists() for nome in ARQUIVOS_DATASET),
+    reason="dataset não está em data/raw/ (versionado no DVC: rode `uv run dvc pull`)",
+)
 
 # --- Testes de ingest ---
 
 
+@requires_dataset
 def test_load_data_retorna_train_test_e_label_map():
     train_df, test_df, label_map = load_data()
 

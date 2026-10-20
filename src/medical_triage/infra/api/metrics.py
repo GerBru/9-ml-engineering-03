@@ -16,6 +16,7 @@ LATENCY = Histogram(
     buckets=(0.001, 0.0025, 0.005, 0.01, 0.015, 0.02, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
 )
 
+
 async def metrics_middleware(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
