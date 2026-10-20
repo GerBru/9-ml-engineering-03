@@ -29,14 +29,14 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 - [x] Dockerfile funcional para o serviço de inferência
 - [x] Pipeline CI/CD básico com GitHub Actions (lint → test → build) (`.github/workflows/ci.yaml`); CD fica fora do escopo
 - [x] Script ou DAG Airflow simples para pipeline de treino/retreino (`airflow/dags/training_dag.py`)
-- [ ] Stack de monitoramento local: API + Prometheus + Grafana via Docker Compose
+- [x] Stack de monitoramento local: API + Prometheus + Grafana via Docker Compose
 - [x] Histórico de commits semântico e organizado
 
 ## Boas Práticas Obrigatórias
 
 - [x] CI/CD com pelo menos 2 automações (lint + testes) — `ruff check`, `ruff format --check` e `pytest` a cada push/PR; os 2 testes que usam o dataset real são pulados no CI (dados no DVC, fora do Git)
 - [x] DAG Airflow funcional (ingestão → treino → salvamento do modelo) — `ingest → validate → train → evaluate → deploy`, com quality gate; executada com sucesso no Airflow 2.10.4 via Docker Compose ([`docs/airflow_runs.jpeg`](docs/airflow_runs.jpeg))
-- [ ] Dashboard Grafana com pelo menos 3 painéis
+- [x] Dashboard Grafana com pelo menos 3 painéis
 - [x] Otimização de performance (ONNX, quantização ou pruning) — Pipeline exportado para ONNX e executado com ONNX Runtime ([`docs/otimizacao_onnx.md`](docs/otimizacao_onnx.md))
 
 ## Etapa 1 — Decisão Arquitetural e API Inicial
@@ -55,8 +55,8 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 ## Etapa 3 — Monitoramento e Observabilidade
 
 - [x] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas) — `src/medical_triage/infra/api/metrics.py` (`http_requests_total`, `http_request_duration_seconds`), exposto em `/metrics`
-- [ ] `docker-compose.yml` com API + Prometheus + Grafana
-- [ ] Dashboard Grafana configurado e exibindo as métricas
+- [x] `docker-compose.yml` com API + Prometheus + Grafana
+- [x] Dashboard Grafana configurado e exibindo as métricas
 
 ## Etapa 4 — Otimização de Latência e Entrega
 
