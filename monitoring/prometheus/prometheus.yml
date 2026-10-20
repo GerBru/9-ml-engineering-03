@@ -1,0 +1,10 @@
+# Padrões que valem para todos os jobs (cada job pode sobrescrever).
+global:
+  scrape_interval: 15s   # uma busca em /metrics a cada 15 segundos
+
+# Lista de jobs: cada item (-) é um grupo de alvos com a mesma função.
+scrape_configs:
+  - job_name: medical-triage-api       # vira o label job="medical-triage-api"
+    static_configs:                    
+      - targets:                      
+          - medical-triage:8000   # nome do serviço no compose + porta do container
