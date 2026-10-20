@@ -27,12 +27,10 @@ Arquivos naquele dia:
 - `src/medical_triage/main.py` — FastAPI e registro das rotas
 - `src/medical_triage/api/routes.py` — endpoints
 
-
 | Método | Rota       | O que fazia                                     |
 | ------ | ---------- | ----------------------------------------------- |
 | `GET`  | `/health`  | `{"status": "ok"}`                              |
 | `POST` | `/predict` | `{"prediction": "low"}` — sem texto, sem modelo |
-
 
 Para rodar:
 
@@ -56,8 +54,6 @@ A pasta que eu tinha em mente naquele dia ainda era plana (`api/`, `schemas/`, `
 Docker e o texto de decisão de nuvem no README oficial ficaram para depois.
 
 ---
-
-
 
 ## 14/09/2026 - Fellipe
 
@@ -106,8 +102,6 @@ src/medical_triage/
 └── main.py
 ```
 
-
-
 ### Decisões técnicas
 
 O modelo sklearn é carregado **uma única vez no startup**, via `lifespan` do FastAPI (`@asynccontextmanager`), e fica em `app.state.model`. Evita variável global e facilita teste. Nas rotas o acesso é por injeção de dependência com `Annotated[Pipeline, Depends(get_model)]`.
@@ -118,12 +112,10 @@ Se o modelo não estiver no ar, quem responde é a dependência `get_model` com 
 
 O `/predict` passou a classificar de verdade:
 
-
 | Método | Rota       | O que faz agora                                                  |
 | ------ | ---------- | ---------------------------------------------------------------- |
 | `GET`  | `/health`  | `{"status": "ok"}`                                               |
 | `POST` | `/predict` | Body `{"text": "..."}` → `{"label": "cardiovascular"}` (exemplo) |
-
 
 Também deixei o Ruff configurado no `pyproject.toml` (`E`, `F`, `I`, `B`).
 
@@ -139,8 +131,6 @@ curl -X POST http://localhost:8000/predict \
 ```
 
 ---
-
-
 
 ## 15/09/2026 - Fellipe
 
@@ -169,8 +159,6 @@ curl -X POST http://localhost:8000/predict \
   -d '{"text": "patient with cardiac chest pain and heart failure"}'
 ```
 
-
-
 ### Latência baseline
 
 `scripts/benchmark.sh` dispara 10 POSTs em `/predict` via `curl` e imprime média, mínimo e máximo. O container precisa estar no ar.
@@ -193,14 +181,12 @@ A fixture `@pytest.fixture` com `yield` centraliza setup/teardown — configura 
 
 Arquivo: `tests/test_api.py`. Cenários:
 
-
 | Caso                                     | Esperado                        |
 | ---------------------------------------- | ------------------------------- |
 | `GET /health`                            | 200 e `{"status": "ok"}`        |
 | `POST /predict` com payload válido       | 200 e campo `label`             |
 | `POST /predict` sem o campo `text`       | 422 (validação Pydantic)        |
 | `POST /predict` com modelo não carregado | 503 (proteção do `get_model()`) |
-
 
 São 6 funções de teste cobrindo esses casos. Warnings do `httpx` antigo resolvidos migrando para `httpx2`.
 
@@ -217,8 +203,6 @@ Só os testes da API:
 uv run pytest tests/test_api.py -v
 ```
 
-
-
 ## Aberto
 
 1. Texto da decisão de nuvem no README oficial
@@ -229,18 +213,13 @@ uv run pytest tests/test_api.py -v
 
 ---
 
-
-
 ## 15/09/2026 - German
-
-
 
 ### Dataset real: Medical Abstracts TC Corpus
 
 Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo.
 
 5 classes, com desbalanceamento real (não é o dataset sintético equilibrado do baseline):
-
 
 | Classe                          | Suporte no teste |
 | ------------------------------- | ---------------- |
@@ -250,9 +229,6 @@ Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo
 | cardiovascular diseases         | 610              |
 | general pathological conditions | 961              |
 
-
-
-
 ### TF-IDF + Random Forest: voltas que dei até chegar num resultado razoável:
 
 1. **Tamanho do arquivo estourou.** Primeira tentativa (`max_features=20000`, bigramas, `RandomForestClassifier(n_estimators=300, max_depth=None)`) gerou um `.joblib` de **217 MB** — acima do limite de 100MB do GitHub, o push ia falhar. Cortei pra `max_features=10000`, só unigramas, `n_estimators=200`, `max_depth=25`, `min_samples_leaf=2`. Ficou em ~17MB.
@@ -260,13 +236,10 @@ Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo
 
 **Métricas finais (conjunto de teste, 2888 amostras):**
 
-
 | Métrica  | Valor |
 | -------- | ----- |
 | Accuracy | 0.549 |
 | F1-macro | 0.541 |
-
-
 
 | Classe                          | Precision | Recall   | F1   |
 | ------------------------------- | --------- | -------- | ---- |
@@ -275,7 +248,6 @@ Comecei a treinar em cima do dataset completo. Os CSVs ficam **fora** deste repo
 | nervous system diseases         | 0.42      | 0.73     | 0.54 |
 | cardiovascular diseases         | 0.62      | 0.78     | 0.69 |
 | general pathological conditions | 0.53      | **0.15** | 0.23 |
-
 
 **Limitação que já vi e ainda não resolvi:** o `class_weight="balanced"` super-corrigiu pra classe majoritária — o recall dela despencou pra 0.15 (o modelo praticamente parou de prever essa classe pra acertar mais as minoritárias). Compensa no F1-macro agregado, mas não é um resultado equilibrado de verdade. Próxima iteração: testar `class_weight="balanced_subsample"`, threshold por classe, ou balancear via oversampling/undersampling antes do TF-IDF.
 
@@ -312,8 +284,6 @@ Pra instalar o `pandas` (grupo de dependência novo, `training`, só pra scripts
 + training = ["pandas>=3.0.5"]
 ```
 
-
-
 ### Como reproduzir
 
 ```bash
@@ -329,11 +299,7 @@ A URL do `origin` estava com um token do GitHub embutido em texto puro (salvo se
 
 ---
 
-
-
 ## 26/09/2026 - German
-
-
 
 ### Refatoração pra pipeline modular
 
@@ -381,11 +347,7 @@ Também adicionei `[tool.pytest.ini_options] pythonpath = ["."]` — necessário
 
 ---
 
-
-
 ## 27/09/2026 - German
-
-
 
 ### Checklist do Tech Challenge no README
 
@@ -409,11 +371,7 @@ Resultado da primeira medição: **83% de cobertura total**, 17/17 testes passan
 
 ---
 
-
-
 ## 27/09/2026 - German
-
-
 
 ### DVC pra versionar o dataset
 
@@ -439,26 +397,23 @@ Como meu acesso está bloqueado, combinamos que **você** faz o primeiro `dvc pu
 Passo a passo:
 
 1. Pega os 3 arquivos por fora do Git — eles nunca foram commitados, estão no `.gitignore` do DVC:
-  - `medical_tc_labels.csv`
-  - `medical_tc_test.csv`
-  - `medical_tc_train.csv`
+   - `medical_tc_labels.csv`
+   - `medical_tc_test.csv`
+   - `medical_tc_train.csv`
 2. Depois de puxar a `develop`, coloca os 3 arquivos exatamente em `data/raw/`, respeitando esses nomes.
 3. Roda:
-  ```bash
-   uv sync --group training
-   uv run dvc push
-  ```
-   Como o conteúdo é idêntico byte a byte ao que já está nos `.dvc` commitados, o hash bate automaticamente — o DVC reconhece sem conflito e sobe pro remote `gdrive_storage`. Na primeira vez deve abrir uma autenticação OAuth pelo navegador, com a tua conta Google (a mesma que tem acesso de edição na pasta).
+   ```bash
+     uv sync --group training
+     uv run dvc push
+   ```
+
+     Como o conteúdo é idêntico byte a byte ao que já está nos `.dvc` commitados, o hash bate automaticamente — o DVC reconhece sem conflito e sobe pro remote `gdrive_storage`. Na primeira vez deve abrir uma autenticação OAuth pelo navegador, com a tua conta Google (a mesma que tem acesso de edição na pasta).
 
 Depois disso, qualquer um (eu incluso, quando o TI liberar) consegue rodar `dvc pull` e recuperar os dados normalmente.
 
 ---
 
-
-
 ## 28/09/2026 - German
-
-
 
 ### Tuning de hiperparâmetros (RandomizedSearchCV)
 
@@ -470,13 +425,11 @@ Branch separada: `feature/tuning-random-forest`. Vinha da Aula 03 da Etapa 3 (Tr
 
 **Resultado:** `max_depth=28, min_samples_leaf=3, n_estimators=289` — F1-macro de 0.5656 na validação cruzada. Apliquei no `config.yaml` e retreinei o pipeline completo:
 
-
 | Métrica               | Antes  | Depois                                         |
 | --------------------- | ------ | ---------------------------------------------- |
 | Accuracy (teste real) | 0.549  | **0.564**                                      |
 | F1-macro (teste real) | 0.541  | **0.558**                                      |
 | Tamanho do `.joblib`  | ~18 MB | ~22.5 MB (ainda bem abaixo do limite de 100MB) |
-
 
 O `random_forest_pipeline.joblib` foi sobrescrito com o modelo novo — mesma estrutura de sempre (`Pipeline` com `tfidf` + `clf` juntos), então o Fellipe não precisa mudar nada no `sklearn_predictor.py`: mesmo nome de arquivo, mesmo contrato (`predict([texto])[0]` retorna string). 17/17 testes continuam passando.
 
@@ -484,11 +437,7 @@ Descoberta de lado, sem ação por enquanto: `models/tfidf_vectorizer.joblib` e 
 
 ---
 
-
-
 ## 03/10/2026 - German
-
-
 
 Destravei o `uv sync` do Fé e fiz o primeiro `dvc push`. As duas coisas eram bloqueadas pela rede da empresa, então fiz de um computador pessoal com Windows.
 
@@ -514,8 +463,6 @@ O aviso "Google não verificou este app" é esperado (**Avançado → Acessar**)
 No Drive, o DVC guarda por hash (`files/md5/77`, `79`, `98`), não pelo nome do arquivo. Não mexer direto por lá.
 
 ---
-
-
 
 ## 04/10/2026 - Fellipe
 
@@ -544,12 +491,10 @@ Regra para quem alterar dado: `dvc add` → `git add` do `.dvc` → `git commit`
 
 Arquivo `.github/workflows/ci.yml`. Gatilhos: `push` em `develop` e `main`, e `pull_request` para qualquer branch. Dois jobs em **paralelo**, sem `needs`, porque respondem perguntas diferentes (o código está certo? a imagem sobe?):
 
-
 | Job     | Steps                                                                                                                                 |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `tests` | checkout@v5 → setup-uv → `uv sync --group dev --group training` → `ruff check .` → `ruff format --check .` → `pytest`                 |
 | `build` | checkout@v5 → `docker build -t medical-triage .` → `docker run -d --name api -p 8000:8000` → smoke test → logs do container se falhar |
-
 
 Máquina fixada em `ubuntu-24.04` (o `ubuntu-latest` migra para o Ubuntu 26 em 19/10/2026 e poderia mudar o comportamento do CI sem mexer no código).
 
@@ -572,7 +517,6 @@ docker rm -f api
 - **CD fora do escopo.** Build + push no registry + deploy ficam como evolução planejada, descrita no README. O `build` do CI só **verifica** (não publica).
 - **Imagem como artefato adiada:** hoje não há quem a consuma.
 - **Proteção de branch** (`develop` e `main`: exigir PR e status checks) só depois que o `tests` estiver estável. Os checks se chamam pelo `name:` dos jobs ("Checagem dos testes" e "Build da imagem Docker").
-
 
 ### Para alinhar com o German
 
@@ -625,12 +569,10 @@ O `prometheus_client` é só uma biblioteca com as peças (tipos de métrica, `g
 
 Arquivo `src/medical_triage/infra/api/metrics.py`, na camada de infra: FastAPI e `prometheus_client` são detalhes externos e não podem vazar para application/domain.
 
-
 | Métrica                         | Tipo      | Labels                     | Para quê                    |
 | ------------------------------- | --------- | -------------------------- | --------------------------- |
 | `http_requests_total`           | Counter   | `method`, `path`, `status` | Contar chamadas e erros     |
 | `http_request_duration_seconds` | Histogram | `path`                     | Medir o tempo e achar o p95 |
-
 
 Os três tipos que o Prometheus oferece:
 
@@ -666,7 +608,6 @@ Com `-> str` a rota devolveria JSON, e o Prometheus espera texto puro (`text/pla
 
 Alguns termos que me deram dúvida no código:
 
-
 | Termo                                      | O que é                                                                                                                                                                                                          |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Callable[[Request], Awaitable[Response]]` | Tipo de uma função que recebe um `Request` e devolve algo "esperável" (`await`) que resulta em `Response`. Em Java seria `Function<Request, CompletableFuture<Response>>`.                                       |
@@ -682,7 +623,6 @@ Com os buckets padrão do Prometheus eu não tinha resolução na faixa de ~15 m
 
 Validação local: 10 chamadas ao `/predict` com o `scripts/benchmark.sh`.
 
-
 | Faixa (tempo no servidor) | Requisições                |
 | ------------------------- | -------------------------- |
 | até 10 ms                 | 0                          |
@@ -690,13 +630,11 @@ Validação local: 10 chamadas ao `/predict` com o `scripts/benchmark.sh`.
 | 15 a 20 ms                | 2                          |
 | 25 a 50 ms                | 1 (a primeira, cold start) |
 
-
 Média no servidor: `0,1678 s / 10 ≈ 16,8 ms`. No cliente (`curl`) deu ≈ 17,7 ms, e a diferença é o custo de conexão e do próprio `curl`. A primeira requisição é mais lenta (cold start) e, com poucas amostras, ela domina o p95. Por isso o p95 deve ser lido em janelas (`[1m]`, `[5m]`) com tráfego contínuo.
 
 ### Capacidade: até onde a API aguenta
 
 O `benchmark.sh` **não é teste de carga**: ele faz uma chamada de cada vez (concorrência 1) e só mede a latência isolada. Para saber o limite é preciso subir a concorrência em degraus e ver onde o p95 estoura. Ainda não rodei esse teste. Fiz a estimativa na conta, como hipótese para validar depois (ferramenta candidata: Locust).
-
 
 | Termo         | O que é                                                                                                                |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -706,7 +644,6 @@ O `benchmark.sh` **não é teste de carga**: ele faz uma chamada de cada vez (co
 | Saturação     | Ponto em que um recurso (CPU, threads) esgota: as requisições entram em fila, a latência sobe e o RPS para de crescer. |
 | Lei de Little | `concorrência = throughput × latência`. Liga as três grandezas acima.                                                  |
 | SLO           | A meta que eu aceitei: **p95 < 100 ms** e taxa de erro < 1% (o 1% é uma escolha minha, ainda a justificar).            |
-
 
 Uso o p95 e não a média porque a média esconde a cauda: com 19 requisições de 20 ms e uma de 600 ms a média dá ~49 ms, mas 5% dos usuários tiveram uma resposta péssima. E olho também os erros, porque uma API que quebra devolve 500 rapidinho e passaria no teste de latência.
 
@@ -724,8 +661,6 @@ Modelo simples: o `/predict` ocupa o servidor ~16,8 ms por requisição, atendid
 - O `path` do label usa o template da rota, e rota inexistente vira `"unmatched"`.
 - Métricas de negócio (ex.: predições por classe) ficam para depois e entrariam por uma port na camada application, com um adaptador Prometheus em `infra/`.
 - Dentro do Docker Compose, `localhost` é o próprio container. O Prometheus vai usar o **nome do serviço** (`api:8000`) como alvo, pelo DNS interno da rede do Compose. Ainda vou confirmar isso na prática.
-
-
 
 ### Para alinhar com o German
 
@@ -799,6 +734,272 @@ No README também marquei "API instrumentada com `prometheus_client`", que estav
 
 ---
 
+## 15/10/2026 - Fellipe
+
+Duas frentes da Etapa 3: um teste de carga rápido, que validou a hipótese de capacidade que eu tinha anotado em 05/10, e a stack de monitoramento no `docker-compose.yml` (API + Prometheus + Grafana) com o `prometheus.yml`. O Grafana ainda não tem datasource nem dashboard.
+
+### Teste de carga rápido (validou a hipótese)
+
+Script `scripts/load_test.sh`, com a ferramenta `hey`. Ele aquece a API por 3 s e depois sobe a concorrência em degraus de 10 s cada (1, 2, 4, 6, 8, 12, 20 e 50 clientes simultâneos), imprimindo req/s, p95, p99 e respostas fora de 2xx.
+
+```bash
+brew install hey
+./scripts/load_test.sh
+```
+
+Resultado (API e gerador de carga na mesma máquina, então os números são de referência local):
+
+| Clientes | req/s | Não-2xx | Latência esperada (clientes ÷ req/s) |
+| -------- | ----- | ------- | ------------------------------------ |
+| 1        | 64,8  | 0       | ~14 ms                               |
+| 2        | 70,1  | 0       | ~29 ms                               |
+| 4        | 69,4  | 0       | ~57 ms                               |
+| 6        | 69,9  | 0       | ~86 ms                               |
+| 8        | 71,0  | 0       | ~114 ms                              |
+| 12       | 69,6  | 0       | ~171 ms                              |
+| 20       | 71,0  | 0       | ~286 ms                              |
+| 50       | 69,8  | 0       | ~714 ms                              |
+
+- O throughput trava em **~70 req/s** já com 2 clientes: o servidor atende praticamente uma requisição de cada vez, e isso é a saturação. A previsão era ~60 req/s (a diferença vem de a requisição levar ~14 ms e não 16,8 ms).
+- Pela Lei de Little (`concorrência = throughput × latência`), o limite de 100 ms para o p95 fica entre **6 e 8 clientes simultâneos**, que bate com a previsão de ~6.
+- Não houve nenhum erro: sob sobrecarga a API **degrada em latência, mas não quebra**.
+- O `/metrics` confirmou a mesma curva: das 5818 requisições do teste, 3170 (54%) terminaram em até 100 ms e nenhuma passou de 1 s.
+- Esse histograma acumula o teste inteiro e mistura todos os degraus, então um p95 calculado sobre ele não significa nada. Para olhar cada degrau é preciso a taxa por janela de tempo (`rate()` sobre o histograma), que é o que o Grafana vai fazer.
+- **Problema no script:** as colunas p95 e p99 saíram vazias, porque o `awk` não encontrou essas linhas na saída real do `hey`. As outras colunas funcionam. Falta colar uma saída bruta de uma rodada para ajustar o parsing.
+
+### Stack de monitoramento no Docker Compose
+
+O Compose cria uma rede interna onde cada serviço é alcançável pelo **nome da chave** do serviço (DNS interno). Três serviços:
+
+| Serviço                 | Imagem                          | Porta no host | Papel                                    |
+| ----------------------- | ------------------------------- | ------------- | ---------------------------------------- |
+| `medical-triage`        | construída do `Dockerfile` (`build: .`) | 8000   | A API                                    |
+| `prometheus`            | `prom/prometheus:v3.5.0`        | 9090          | Coleta e guarda as métricas              |
+| `grafana`               | `grafana/grafana:12.2.0`        | 3000          | Consulta o Prometheus e desenha os gráficos |
+
+```yaml
+services:
+  medical-triage:
+    build: .
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+  prometheus-data:
+```
+
+### `prometheus.yml`
+
+Arquivo em `monitoring/prometheus/prometheus.yml`, montado dentro do container do Prometheus.
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: medical-triage-api
+    static_configs:
+      - targets:
+          - medical-triage:8000
+```
+
+| Termo             | O que é                                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scrape_interval` | De quanto em quanto tempo o Prometheus faz uma busca (`GET /metrics`). Ele busca para sempre; o valor é o intervalo entre as buscas, não uma duração. Limita a janela útil do `rate()`: com 15 s, `[1m]` tem ~4 pontos. |
+| `job`             | Um nome para um grupo de alvos com a mesma função. Vira o label `job` em toda série coletada dali. Cada alvo também ganha o label `instance` (`host:porta`).        |
+| `target`          | Só `host:porta`, **sem** o `/metrics`. O caminho é outra configuração (`metrics_path`), cujo padrão já é `/metrics`.                                                |
+| `up`              | Métrica que o Prometheus cria sozinho para cada alvo: 1 se a última coleta funcionou, 0 se falhou. O jeito mais rápido de conferir se a configuração está certa.     |
+
+O target tem que ser **idêntico à chave do serviço no compose** (`medical-triage`), com a **porta do container** (8000). Dentro do container do Prometheus, `localhost` é o próprio Prometheus, e não a API.
+
+### Conceitos de Compose que eu precisei fixar
+
+| Termo                      | O que é                                                                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image` vs `build`         | `image` baixa uma imagem pronta de um registry. `build: .` constrói a partir do `Dockerfile` da pasta indicada. `image: DockerFile` está errado: `image` não aceita arquivo.  |
+| `ports: "H:C"`             | Publica uma porta do container na **minha máquina**. Entre containers da mesma rede não é necessário: eles se falam pelo nome do serviço e pela porta do container.          |
+| Bind mount                 | `./arquivo:/destino:ro` liga um arquivo do host a um caminho dentro do container (`ro` = somente leitura). Usei para entregar o `prometheus.yml` ao Prometheus.              |
+| Volume nomeado             | `nome:/destino`, declarado na seção `volumes:` do final. É criado e gerenciado pelo Docker (fora do container), cresce conforme se grava e sobrevive à recriação do container. `docker compose down` não o apaga, só `down -v`. |
+| `depends_on`               | Só controla a **ordem de início**. Se o Prometheus cair depois, o Grafana continua rodando. Esperar o serviço ficar pronto exige `condition: service_healthy` e um healthcheck. |
+| `restart: unless-stopped`  | Reinicia o container se o processo cair ou se o Docker/máquina reiniciar, a menos que eu o tenha parado de propósito. Reage à **saída do processo**, não ao estado `unhealthy`. |
+| `healthcheck`              | Comando que o Docker roda **dentro** do container de tempos em tempos. Código de saída 0 = saudável. Outros serviços, orquestradores e o `docker compose ps` consomem esse estado. |
+
+O healthcheck da API usa só a biblioteca padrão do Python, porque a imagem `python:3.12-slim` não traz `curl`:
+
+```
+python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+```
+
+O `urlopen` lança exceção se a resposta for 4xx/5xx ou se a conexão for recusada, e a exceção não tratada faz o Python sair com código 1 (falha). Aqui o `localhost` está certo, porque o comando roda dentro do próprio container da API.
+
+### Decisões
+
+- **URL do datasource do Grafana:** `http://prometheus:9090` (nome do serviço mais porta do container), e não `localhost`. Quem consulta o Prometheus é o servidor do Grafana (o container), não o meu navegador.
+- Versões das imagens **fixadas** em tags (reprodutibilidade, mesmo motivo do `ubuntu-24.04` no CI). As tags `v3.5.0` e `12.2.0` precisam ser conferidas no Docker Hub; se o `pull` falhar com "manifest unknown", é a tag.
+- O healthcheck da API usa o `/health`, que é rota de liveness. Cada chamada dele passa pelo middleware e é contada nas métricas; é a mesma questão do ruído do `/metrics` medindo a si mesmo.
+- Prometheus e Grafana ficam **sem healthcheck** por enquanto: ninguém consome esse estado na nossa stack. Quando for necessário, os endpoints são `/-/ready` (Prometheus, pronto para consultas), `/-/healthy` (processo vivo) e `/api/health` (Grafana). Preciso confirmar se a imagem traz `wget` antes de usar.
+- Volume `prometheus-data` para preservar o histórico de séries entre recriações do container.
+
+### Para alinhar com o German
+
+- Se o `.joblib` passar a ser versionado no DVC (item que já estava combinado), o `docker compose up --build` e o `COPY models/` do `Dockerfile` passam a exigir `dvc pull` antes do build.
+- O teste de carga mede o `random_forest_pipeline.joblib` atual (modelo do tuning). Se o modelo mudar, os ~70 req/s e a faixa de buckets precisam ser reavaliados.
+
+### Em aberto
+
+1. [CONFIRMAR] Resultado de `docker compose up -d --build`: estado no `docker compose ps` (API `healthy`), alvo UP em Status → Targets e resultado da consulta `up`.
+2. Datasource do Grafana por provisioning (arquivo em `monitoring/grafana/provisioning/datasources/`, montado no container).
+3. Dashboard simples: taxa de requisições (`rate(http_requests_total[1m])`), p95 de latência (`histogram_quantile` sobre o histograma) e contagem por status; export do JSON e print como entrega da etapa.
+4. Ajustar o parsing do `load_test.sh` (p95/p99) a partir de uma saída bruta do `hey`.
+5. Investigar o teto de ~70 req/s: mais workers do uvicorn ajudam, mas só até o limite da CPU da própria máquina.
+6. Decidir se o middleware ignora `/metrics` e `/health` (ruído) e se desligo as séries `_created`.
+7. Testes de `/metrics` e do middleware; confirmar o `prometheus-client` nas dependências de produção (o Dockerfile usa `--no-dev`).
+8. Refazer o baseline de latência no Docker e atualizar `docs/baseline_latency.md`.
+9. README: seção de monitoramento (como subir a stack, portas, como achar o dashboard).
+
+---
+
+## 18/10/2026 - Fellipe
+
+Fechei o dashboard do Grafana da Etapa 3. O datasource e o dashboard agora são **configuração versionada** (provisioning): sobem sozinhos com `docker compose up`, em qualquer máquina, sem clicar em nada.
+
+### Datasource por provisioning
+
+Primeiro criei o datasource à mão pela interface, para ver o problema: tudo que é criado pela UI fica no banco do Grafana (volume `grafana-data`) e some com um `docker compose down -v`. Depois fiz o mesmo por arquivo.
+
+Arquivo `monitoring/grafana/provisioning/datasources/datasource.yml`:
+
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+```
+
+| Campo | Por quê |
+| --- | --- |
+| `uid: prometheus` | O dashboard aponta para o datasource pelo uid. Pela UI ele saiu aleatório (`eg1qdp3zazitca`), o que quebraria o dashboard em outra máquina. |
+| `access: proxy` | Quem consulta o Prometheus é o servidor do Grafana (o container), não o navegador. |
+| `url: http://prometheus:9090` | Nome do serviço mais porta do container, pelo DNS interno da rede do compose. Com `localhost:9090` o teste falha: dentro do container do Grafana, `localhost` é o próprio Grafana. |
+| `editable: false` | A UI não altera o datasource; a fonte da verdade é o arquivo. |
+
+### Dashboard "Medical Triage API"
+
+Organizado em duas rows, seguindo os padrões RED (serviço, visto de fora) e USE (recursos, vistos de dentro). Cabe numa tela só.
+
+| Row | Painel | Consulta | Unidade |
+| --- | --- | --- | --- |
+| Serviço (RED) | Requisições por segundo | `sum by (path) (rate(http_requests_total[1m]))` | req/s |
+| Serviço (RED) | Taxa de erro (5xx) | `(sum(rate(http_requests_total{path="/predict", status=~"5.."}[1m])) or vector(0)) / sum(rate(http_requests_total{path="/predict"}[1m]))` | %, linha em 1% |
+| Serviço (RED) | Requisições por status | `sum by (status) (rate(http_requests_total[1m]))` | req/s |
+| Serviço (RED) | Latência — /predict | `histogram_quantile` 0.95 e 0.99 sobre `sum by (le) (rate(http_request_duration_seconds_bucket{path="/predict"}[1m]))` | ms, linha em 100 ms |
+| Recursos (USE) | CPU do processo da API | `rate(process_cpu_seconds_total{job="medical-triage-api"}[1m])` | núcleos, linha em 1 |
+| Recursos (USE) | Memória do processo da API | `process_resident_memory_bytes{job="medical-triage-api"}` | bytes (IEC) |
+
+CPU e memória vêm das métricas de processo que o `prometheus_client` já expõe em Linux. Não precisou de cAdvisor nem de outro serviço.
+
+### Dashboard como código
+
+Arquivo `monitoring/grafana/provisioning/dashboards/dashboards.yml` (o provider, que só aponta para a pasta dos JSONs):
+
+```yaml
+apiVersion: 1
+
+providers:
+  - name: medical-triage
+    folder: Medical Triage
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+```
+
+O dashboard em si é `monitoring/grafana/dashboards/medical-triage.json`. Volumes no serviço `grafana` do compose:
+
+```yaml
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+```
+
+**Como alterar o dashboard daqui para a frente:** editar na UI → **Export → Export as code**, formato **Classic**, com "export externally" desligado → substituir o `medical-triage.json` → commit. A UI não salva por cima (`allowUiUpdates: false`), e o Grafana relê a pasta a cada ~10 s, sem reiniciar. Os formatos *Resource* do export e a opção externa (que troca o datasource por `${DS_PROMETHEUS}`) não funcionam com esse provider.
+
+Validação: `docker compose down -v` + `docker compose up -d`. O datasource e o dashboard voltaram sozinhos, sem erro nos logs, e a UI recusou salvar alteração por cima do dashboard provisionado.
+
+### O que o dashboard mostrou (tráfego contínuo, ~7,3 req/s no /predict)
+
+| Sinal | Valor |
+| --- | --- |
+| p95 do /predict | ~48 ms |
+| p99 do /predict | ~50 ms, com um pico de ~60 ms |
+| Taxa de erro 5xx | 0% |
+| CPU | ~0,14 núcleo |
+| Memória | ~190–200 MiB, estável |
+
+- 0,14 núcleo ÷ 7,3 req/s ≈ **19 ms de CPU por requisição**, perto da latência medida. Hipótese: o `/predict` é limitado por CPU, o que explicaria o teto de ~70 req/s do teste de carga (um processo, um núcleo). Falta confirmar rodando o teste de carga com o painel aberto.
+- O p95 de ~48 ms está bem acima da média de ~15 ms que eu tinha medido. Parte disso é interpolação: os buckets pulam de 25 para 50 ms, e o `histogram_quantile` estima dentro da faixa. Falta comparar com a média (`rate(_sum) / rate(_count)`).
+
+### Decisões
+
+- **Erro do serviço é só 5xx.** Um 422 é a API recusando entrada inválida, ou seja, funcionando. O SLO de erro < 1% conta só 5xx.
+- A taxa de erro filtra `path="/predict"`: sem isso, os scrapes do `/metrics` e os healthchecks entram no total e diluem a taxa.
+- `or vector(0)` na taxa de erro: a série de 5xx só existe depois do primeiro erro, e sem isso o painel mostraria "No data" justamente quando está tudo bem.
+- Unidades informadas na forma crua (segundos, bytes, fração), com o Grafana convertendo na exibição. Eixos com *Soft min* 0 para não ampliar variações minúsculas.
+- Dashboard só por provisioning; a interface serve para desenhar, não para guardar.
+
+### Para alinhar com o German
+
+- Mudanças no dashboard entram por PR, editando o JSON (fluxo acima). Alteração feita só na UI se perde.
+- Se o modelo mudar (mais árvores, outro algoritmo), os buckets do histograma e a leitura do painel de CPU precisam ser revistos.
+
+### Em aberto
+
+1. Senha do Grafana via `.env` (`GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`) com `.env.example` no repo; hoje é o padrão `admin`/`admin`.
+2. Print do dashboard como entrega da etapa.
+3. README: seção de monitoramento (como subir a stack, portas, onde achar o dashboard, fluxo de alteração).
+4. Teste de carga com o painel de CPU aberto, para confirmar o teto por CPU.
+5. Comparar p95 com a média recente e avaliar buckets entre 25 e 50 ms.
+6. Ajustar o parsing do `load_test.sh` (p95/p99) a partir de uma saída bruta do `hey`.
+7. Decidir se o middleware ignora `/metrics` e `/health` (ruído nas métricas) e se desligo as séries `_created`.
+8. Testes de `/metrics` e do middleware; confirmar o `prometheus-client` nas dependências de produção (o Dockerfile usa `--no-dev`).
+9. Refazer o baseline de latência no Docker e atualizar `docs/baseline_latency.md`.
+
+---
+
 ## 19/10/2026 - German
 
 ### Otimização de latência com ONNX (Etapa 4)
@@ -830,3 +1031,4 @@ Ganho de 268x no p50 sobre o publicado (109x sobre `n_jobs=1`). O `.onnx` tem 13
 1. **Baseline de latência (o ponto que você deixou pra alinhar comigo):** os ~15 ms que você mediu na API são quase todos do modelo: só a inferência leva 13,5 ms, por causa do `n_jobs=-1` do Random Forest. Os ~0,27 ms antigos devem ser do teu modelo sintético (`classifier.joblib`, Regressão Logística): medi agora e ele faz 0,18 ms.
 2. **Servir o ONNX na API (decisão tua):** o `.onnx` já está em `models/`. Precisaria mover o `onnxruntime` para as `dependencies` de produção e criar um adaptador em `infra/ml/` que carregue o `.onnx` (a entrada se chama `text`, formato `[n, 1]`; a saída `label` já vem em texto). Se servir, os buckets do histograma vão precisar de faixas abaixo de 1 ms.
 
+---
