@@ -403,11 +403,11 @@ Passo a passo:
 2. Depois de puxar a `develop`, coloca os 3 arquivos exatamente em `data/raw/`, respeitando esses nomes.
 3. Roda:
    ```bash
-    uv sync --group training
-    uv run dvc push
+     uv sync --group training
+     uv run dvc push
    ```
 
-    Como o conteúdo é idêntico byte a byte ao que já está nos `.dvc` commitados, o hash bate automaticamente — o DVC reconhece sem conflito e sobe pro remote `gdrive_storage`. Na primeira vez deve abrir uma autenticação OAuth pelo navegador, com a tua conta Google (a mesma que tem acesso de edição na pasta).
+     Como o conteúdo é idêntico byte a byte ao que já está nos `.dvc` commitados, o hash bate automaticamente — o DVC reconhece sem conflito e sobe pro remote `gdrive_storage`. Na primeira vez deve abrir uma autenticação OAuth pelo navegador, com a tua conta Google (a mesma que tem acesso de edição na pasta).
 
 Depois disso, qualquer um (eu incluso, quando o TI liberar) consegue rodar `dvc pull` e recuperar os dados normalmente.
 
@@ -829,4 +829,119 @@ O `urlopen` lança exceção se a resposta for 4xx/5xx ou se a conexão for recu
 7. Testes de `/metrics` e do middleware; confirmar o `prometheus-client` nas dependências de produção (o Dockerfile usa `--no-dev`).
 8. Refazer o baseline de latência no Docker e atualizar `docs/baseline_latency.md`.
 9. README: seção de monitoramento (como subir a stack, portas, como achar o dashboard).
+
+---
+
+## 18/10/2026 - Fellipe
+
+Fechei o dashboard do Grafana da Etapa 3. O datasource e o dashboard agora são **configuração versionada** (provisioning): sobem sozinhos com `docker compose up`, em qualquer máquina, sem clicar em nada.
+
+### Datasource por provisioning
+
+Primeiro criei o datasource à mão pela interface, para ver o problema: tudo que é criado pela UI fica no banco do Grafana (volume `grafana-data`) e some com um `docker compose down -v`. Depois fiz o mesmo por arquivo.
+
+Arquivo `monitoring/grafana/provisioning/datasources/datasource.yml`:
+
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+```
+
+| Campo | Por quê |
+| --- | --- |
+| `uid: prometheus` | O dashboard aponta para o datasource pelo uid. Pela UI ele saiu aleatório (`eg1qdp3zazitca`), o que quebraria o dashboard em outra máquina. |
+| `access: proxy` | Quem consulta o Prometheus é o servidor do Grafana (o container), não o navegador. |
+| `url: http://prometheus:9090` | Nome do serviço mais porta do container, pelo DNS interno da rede do compose. Com `localhost:9090` o teste falha: dentro do container do Grafana, `localhost` é o próprio Grafana. |
+| `editable: false` | A UI não altera o datasource; a fonte da verdade é o arquivo. |
+
+### Dashboard "Medical Triage API"
+
+Organizado em duas rows, seguindo os padrões RED (serviço, visto de fora) e USE (recursos, vistos de dentro). Cabe numa tela só.
+
+| Row | Painel | Consulta | Unidade |
+| --- | --- | --- | --- |
+| Serviço (RED) | Requisições por segundo | `sum by (path) (rate(http_requests_total[1m]))` | req/s |
+| Serviço (RED) | Taxa de erro (5xx) | `(sum(rate(http_requests_total{path="/predict", status=~"5.."}[1m])) or vector(0)) / sum(rate(http_requests_total{path="/predict"}[1m]))` | %, linha em 1% |
+| Serviço (RED) | Requisições por status | `sum by (status) (rate(http_requests_total[1m]))` | req/s |
+| Serviço (RED) | Latência — /predict | `histogram_quantile` 0.95 e 0.99 sobre `sum by (le) (rate(http_request_duration_seconds_bucket{path="/predict"}[1m]))` | ms, linha em 100 ms |
+| Recursos (USE) | CPU do processo da API | `rate(process_cpu_seconds_total{job="medical-triage-api"}[1m])` | núcleos, linha em 1 |
+| Recursos (USE) | Memória do processo da API | `process_resident_memory_bytes{job="medical-triage-api"}` | bytes (IEC) |
+
+CPU e memória vêm das métricas de processo que o `prometheus_client` já expõe em Linux. Não precisou de cAdvisor nem de outro serviço.
+
+### Dashboard como código
+
+Arquivo `monitoring/grafana/provisioning/dashboards/dashboards.yml` (o provider, que só aponta para a pasta dos JSONs):
+
+```yaml
+apiVersion: 1
+
+providers:
+  - name: medical-triage
+    folder: Medical Triage
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+```
+
+O dashboard em si é `monitoring/grafana/dashboards/medical-triage.json`. Volumes no serviço `grafana` do compose:
+
+```yaml
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+```
+
+**Como alterar o dashboard daqui para a frente:** editar na UI → **Export → Export as code**, formato **Classic**, com "export externally" desligado → substituir o `medical-triage.json` → commit. A UI não salva por cima (`allowUiUpdates: false`), e o Grafana relê a pasta a cada ~10 s, sem reiniciar. Os formatos *Resource* do export e a opção externa (que troca o datasource por `${DS_PROMETHEUS}`) não funcionam com esse provider.
+
+Validação: `docker compose down -v` + `docker compose up -d`. O datasource e o dashboard voltaram sozinhos, sem erro nos logs, e a UI recusou salvar alteração por cima do dashboard provisionado.
+
+### O que o dashboard mostrou (tráfego contínuo, ~7,3 req/s no /predict)
+
+| Sinal | Valor |
+| --- | --- |
+| p95 do /predict | ~48 ms |
+| p99 do /predict | ~50 ms, com um pico de ~60 ms |
+| Taxa de erro 5xx | 0% |
+| CPU | ~0,14 núcleo |
+| Memória | ~190–200 MiB, estável |
+
+- 0,14 núcleo ÷ 7,3 req/s ≈ **19 ms de CPU por requisição**, perto da latência medida. Hipótese: o `/predict` é limitado por CPU, o que explicaria o teto de ~70 req/s do teste de carga (um processo, um núcleo). Falta confirmar rodando o teste de carga com o painel aberto.
+- O p95 de ~48 ms está bem acima da média de ~15 ms que eu tinha medido. Parte disso é interpolação: os buckets pulam de 25 para 50 ms, e o `histogram_quantile` estima dentro da faixa. Falta comparar com a média (`rate(_sum) / rate(_count)`).
+
+### Decisões
+
+- **Erro do serviço é só 5xx.** Um 422 é a API recusando entrada inválida, ou seja, funcionando. O SLO de erro < 1% conta só 5xx.
+- A taxa de erro filtra `path="/predict"`: sem isso, os scrapes do `/metrics` e os healthchecks entram no total e diluem a taxa.
+- `or vector(0)` na taxa de erro: a série de 5xx só existe depois do primeiro erro, e sem isso o painel mostraria "No data" justamente quando está tudo bem.
+- Unidades informadas na forma crua (segundos, bytes, fração), com o Grafana convertendo na exibição. Eixos com *Soft min* 0 para não ampliar variações minúsculas.
+- Dashboard só por provisioning; a interface serve para desenhar, não para guardar.
+
+### Para alinhar com o German
+
+- Mudanças no dashboard entram por PR, editando o JSON (fluxo acima). Alteração feita só na UI se perde.
+- Se o modelo mudar (mais árvores, outro algoritmo), os buckets do histograma e a leitura do painel de CPU precisam ser revistos.
+
+### Em aberto
+
+1. Senha do Grafana via `.env` (`GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD`) com `.env.example` no repo; hoje é o padrão `admin`/`admin`.
+2. Print do dashboard como entrega da etapa.
+3. README: seção de monitoramento (como subir a stack, portas, onde achar o dashboard, fluxo de alteração).
+4. Teste de carga com o painel de CPU aberto, para confirmar o teto por CPU.
+5. Comparar p95 com a média recente e avaliar buckets entre 25 e 50 ms.
+6. Ajustar o parsing do `load_test.sh` (p95/p99) a partir de uma saída bruta do `hey`.
+7. Decidir se o middleware ignora `/metrics` e `/health` (ruído nas métricas) e se desligo as séries `_created`.
+8. Testes de `/metrics` e do middleware; confirmar o `prometheus-client` nas dependências de produção (o Dockerfile usa `--no-dev`).
+9. Refazer o baseline de latência no Docker e atualizar `docs/baseline_latency.md`.
 
