@@ -227,8 +227,8 @@ Já decidido: **deploy em tempo real**, não em batch. A API precisa classificar
 
 | Integrante | Responsável por |
 | --- | --- |
-| Fellipe Bastos | API, Docker, CI/CD, monitoramento (Prometheus e Grafana), arquitetura em nuvem |
-| German Brunner | Modelo, pipeline de treino, DVC, DAG do Airflow, otimização com ONNX |
+| Fellipe Bastos | fellipe.resende@hotmail.com |
+| German Brunner | brunner.brunner@gmail.com |
 
 ## Checklist do Tech Challenge
 
