@@ -225,7 +225,7 @@ Já decidido: **deploy em tempo real**, não em batch. A API precisa classificar
 
 ### Equipe
 
-| Integrante | Responsável por |
+| Integrante | E-Mail |
 | --- | --- |
 | Fellipe Bastos | fellipe.resende@hotmail.com |
 | German Brunner | brunner.brunner@gmail.com |
