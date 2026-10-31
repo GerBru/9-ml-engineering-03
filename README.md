@@ -4,7 +4,7 @@
 
 Tech Challenge da Fase 3 (FIAP — Machine Learning Engineering): **deploy de modelo em produção com pipeline CI/CD, monitoramento e otimização de latência**.
 
-Um hospital precisa triar automaticamente laudos médicos em texto. Este projeto treina um classificador de texto (TF-IDF + Random Forest) que recebe o texto de um laudo e devolve uma de 5 categorias de condição médica, e cobre o ciclo de vida do modelo:
+Um hospital precisa triar automaticamente laudos médicos em texto. Este projeto treina um classificador de texto (TF-IDF + Random Forest) que recebe o texto de um laudo e devolve uma de 5 categorias de condição médica (ver [Dataset](#dataset)), e cobre o ciclo de vida do modelo:
 
 - **API REST** com FastAPI, empacotada em Docker;
 - **CI** com GitHub Actions (lint, formatação, testes, build da imagem e smoke test);
@@ -115,6 +115,8 @@ uv run python -m medical_triage.main      # http://localhost:8000
 
 [Medical Abstracts TC Corpus](https://github.com/sebischair/Medical-Abstracts-TC-Corpus) (Schopf, Braun e Matthes, 2023): resumos médicos em 5 classes (`neoplasms`, `digestive system diseases`, `nervous system diseases`, `cardiovascular diseases`, `general pathological conditions`), com 11.550 exemplos de treino e 2.888 de teste.
 
+**Condição médica, não urgência.** O cenário do desafio fala em classificar a urgência do laudo (ex.: normal / atenção / urgente), mas o dataset sugerido no próprio enunciado não tem rótulos de urgência: as classes são categorias de condição médica. Por isso o modelo classifica a condição, que é o rótulo disponível. O resto do projeto (treino, API, CI/CD, monitoramento e otimização) não depende do rótulo: com um dataset rotulado por urgência, bastaria adaptar a ingestão e retreinar com o mesmo pipeline.
+
 Os CSVs ficam em `data/raw/` e são versionados com **DVC**: o Git guarda só os ponteiros `.dvc`. O remote do DVC é uma pasta privada no Google Drive, então quem não é da equipe baixa direto do repositório público. Os arquivos são idênticos (o MD5 bate com os `.dvc`).
 
 ```bash
@@ -199,6 +201,8 @@ O CI (`.github/workflows/ci.yaml`) roda a cada push na `develop`/`main` e em tod
 | --- | --- |
 | Accuracy | 0.564 |
 | F1-macro | 0.558 |
+
+**Latência da API** (baseline local, `scripts/benchmark.sh`: 10 requisições seguidas ao `/predict`, tempo medido no cliente): média de **~15 ms** por requisição. Quase todo esse tempo é a inferência do modelo (~13,5 ms, abaixo).
 
 **Latência de inferência** (um laudo por vez, só o modelo). Detalhes em [`docs/otimizacao_onnx.md`](docs/otimizacao_onnx.md):
 
