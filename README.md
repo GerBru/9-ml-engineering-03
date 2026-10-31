@@ -267,7 +267,6 @@ flowchart LR
 ## Documentação
 
 - [`binnacle.md`](binnacle.md): diário de bordo, com as decisões técnicas por data e por autor.
-- [`docs/otimizacao_onnx.md`](docs/otimizacao_onnx.md): otimização de latência com ONNX.
 - [`docs/Tech Challenge Fase 03.pdf`](docs/Tech%20Challenge%20Fase%2003.pdf): enunciado do desafio.
 
 ### Equipe
