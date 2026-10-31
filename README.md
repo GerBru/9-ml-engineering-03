@@ -213,9 +213,56 @@ O ONNX é cerca de 268 vezes mais rápido no p50, com 100% das predições iguai
 
 ## Decisão de arquitetura em nuvem
 
-> **A completar (Fellipe):** provedor escolhido (AWS, Azure ou GCP), serviços usados e justificativa.
+Análise pedida na Etapa 1 do desafio. É uma **proposta**: o deploy em nuvem não foi executado, e a stack roda localmente com Docker Compose.
 
-Já decidido: **deploy em tempo real**, não em batch. A API precisa classificar o laudo na hora da requisição. Um modelo de NLP clássico e leve, sem GPU, tem latência previsível num serviço sempre ativo. Batch fica como complemento para processamento em massa.
+### Tempo real, não batch
+
+A API precisa classificar o laudo no momento em que ele chega: numa triagem, o resultado só tem valor se vier na hora. Isso descarta o deploy em batch, cuja latência (minutos a horas) é incompatível com decisões imediatas. O modelo também favorece o tempo real: TF-IDF + Random Forest roda só em CPU, ocupa ~200 MiB de memória e classifica um laudo em ~13,5 ms. É um modelo leve, que fica carregado em memória e responde com latência previsível.
+
+O batch entra só como complemento: reprocessar um lote histórico de laudos ou retreinar o modelo, que hoje é feito pela DAG do Airflow.
+
+### Por que não serverless
+
+Um serviço serverless (ex.: AWS Lambda) cobra só pelo uso e escala sozinho, mas não se encaixa neste caso:
+
+- **Monitoramento:** o Prometheus coleta as métricas buscando o `/metrics` da API de tempos em tempos. Isso exige um processo que fique de pé. Numa função efêmera, os contadores e o histograma de latência ficam na memória de cada execução e se perdem, e a stack de monitoramento do projeto deixaria de funcionar como está.
+- **Cold start:** cada nova instância precisaria carregar o scikit-learn e um modelo de 22,5 MB antes de responder, o que torna a latência imprevisível justamente quando o sistema escala.
+- **Perfil de demanda:** serverless compensa com demanda intermitente. Um hospital gera fluxo contínuo de laudos, e aí um serviço sempre ativo é o padrão indicado.
+
+### Provedor: AWS
+
+Os três provedores oferecem serviços equivalentes para o mesmo desenho:
+
+| Papel | AWS | Azure | GCP |
+| --- | --- | --- | --- |
+| Registro de imagens | ECR | ACR | Artifact Registry |
+| Tempo real (VM) | EC2 | Virtual Machine | Compute Engine |
+| Serverless | Lambda | Container Apps | Cloud Run |
+| Batch | AWS Batch | Container Apps Jobs | Cloud Run Jobs |
+| Plataforma gerenciada | SageMaker | Azure ML | Vertex AI |
+
+Para um modelo leve, só com CPU, nenhum dos três tem vantagem técnica decisiva. O critério de desempate foi a **experiência da equipe**: um dos integrantes trabalha com AWS no dia a dia, o que reduz o risco operacional e torna mais rápida e segura a configuração de permissões (IAM) e de rede.
+
+### Arquitetura proposta
+
+```mermaid
+flowchart LR
+    CI["Imagem Docker<br/>(mesmo Dockerfile do CI)"] --> ECR[("Amazon ECR")]
+    ECR --> EC2["Amazon EC2 · sa-east-1<br/>Docker Compose:<br/>API + Prometheus + Grafana"]
+    H["Sistema do hospital"] -- "HTTPS · /predict" --> EC2
+```
+
+- **Amazon ECR** guarda a imagem da API, gerada pelo mesmo `Dockerfile` que o CI já constrói.
+- **Amazon EC2** roda a stack com o mesmo `docker-compose.yml` validado localmente. Uma instância pequena, só com CPU, basta: no teste de carga, um processo atendeu ~70 req/s, e o `/predict` é limitado por CPU.
+- **Região `sa-east-1` (São Paulo)**, pela proximidade do hospital e por se tratar de dados de saúde, que a LGPD classifica como sensíveis.
+- **Descartado: endpoint do SageMaker.** Ele traz escalonamento gerenciado, mas acrescenta custo e complexidade desproporcionais para um modelo scikit-learn de 22,5 MB, e exigiria adaptar o monitoramento.
+
+**Se a demanda crescer:** mais workers do uvicorn por instância, uma instância maior ou várias instâncias atrás de um load balancer. Servir o modelo em ONNX (0,05 ms por inferência, contra 13,5 ms no scikit-learn) também tira o modelo da posição de gargalo.
+
+### Custo e segurança
+
+- **Custo:** tempo real significa custo constante, com a instância ligada 24 horas por dia. É o preço aceito pela resposta imediata, e por isso a instância deve ser pequena e os ambientes de teste, desligados quando ociosos.
+- **Segurança:** laudos são dados sensíveis. Proposta: HTTPS na API, criptografia dos volumes, permissões com menor privilégio (a instância só pode baixar imagens do ECR), Prometheus e Grafana fechados ao acesso público e, numa evolução, autenticação e limite de requisições na API contra abuso e extração do modelo.
 
 ## Documentação
 
@@ -253,7 +300,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 
 ### Etapa 1 — Decisão Arquitetural e API Inicial
 
-- [ ] Decisão de estratégia de deploy em nuvem documentada no README (AWS/Azure/GCP, batch vs. real-time)
+- [x] Decisão de estratégia de deploy em nuvem documentada no README (AWS/Azure/GCP, batch vs. real-time) — tempo real na AWS (ECR + EC2), em [Decisão de arquitetura em nuvem](#decisão-de-arquitetura-em-nuvem)
 - [x] API FastAPI que recebe texto do laudo e retorna a classificação
 - [x] API empacotada em container Docker
 - [x] Medição de tempo de resposta / baseline de latência local (`scripts/benchmark.sh`)

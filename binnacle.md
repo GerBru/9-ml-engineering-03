@@ -1032,3 +1032,31 @@ Ganho de 268x no p50 sobre o publicado (109x sobre `n_jobs=1`). O `.onnx` tem 13
 2. **Servir o ONNX na API (decisão tua):** o `.onnx` já está em `models/`. Precisaria mover o `onnxruntime` para as `dependencies` de produção e criar um adaptador em `infra/ml/` que carregue o `.onnx` (a entrada se chama `text`, formato `[n, 1]`; a saída `label` já vem em texto). Se servir, os buckets do histograma vão precisar de faixas abaixo de 1 ms.
 
 ---
+
+## 31/10/2026 - German
+
+### Decisão de arquitetura em nuvem (Etapa 1)
+
+Completei a seção **Decisão de arquitetura em nuvem** do README, que estava como "A completar (Fellipe)". Era o último item da Etapa 1 no checklist, que agora está marcado. Ela parte da tua entrada de 13/09 (tempo real, não batch) e da tua escolha de AWS pela familiaridade com a plataforma, e se apoia no material da Etapa 1 (Deploy em nuvem): padrões batch, tempo real e serverless (Aula 01), modelos leves em API (Aula 02), serviços da AWS (Aula 03), equivalentes no Azure e no GCP (Aulas 04 e 05) e custo e segurança (Aula 06).
+
+Está escrito como **proposta**: não subimos nada na nuvem, e o desafio só pede a análise textual.
+
+Resumo do que ficou no README:
+
+- **Tempo real:** a triagem precisa da resposta na hora, e o modelo é leve (só CPU, ~200 MiB, ~13,5 ms por laudo). Batch fica como complemento (reprocessar lote histórico, retreino pela DAG).
+- **Por que não serverless (Lambda):** (1) o Prometheus faz pull do `/metrics` e precisa de um processo de pé; numa função efêmera os contadores e o histograma se perdem a cada execução; (2) cold start carregando scikit-learn e o modelo de 22,5 MB; (3) hospital tem fluxo contínuo, não intermitente. O argumento (1) é nosso, o material só fala de cold start.
+- **AWS:** tabela de equivalentes nos três provedores (registry, VM, serverless, batch, plataforma gerenciada). Como nenhum tem vantagem técnica decisiva para um modelo leve em CPU, o desempate foi a experiência da equipe. Escrevi "um dos integrantes trabalha com AWS no dia a dia", sem citar nome.
+- **Arquitetura proposta:** imagem da API no **ECR** → **EC2** rodando o mesmo `docker-compose.yml` (API + Prometheus + Grafana), região `sa-east-1` (proximidade e dados de saúde, sensíveis pela LGPD). SageMaker descartado: custo e complexidade desproporcionais para um modelo de 22,5 MB, e exigiria adaptar o monitoramento.
+- **Escala:** mais workers do uvicorn, instância maior ou várias atrás de load balancer; servir o ONNX tiraria o modelo da posição de gargalo.
+- **Custo e segurança:** custo constante do tempo real (instância pequena, desligar ambientes de teste); HTTPS, criptografia de volumes, IAM com menor privilégio, Prometheus/Grafana sem acesso público e, numa evolução, autenticação e limite de requisições na API.
+
+### Pro Fellipe
+
+A seção era tua, então revisa e muda o que não concordar:
+
+1. **Serviço de execução:** usei **EC2** porque é o que a Aula 03 ensina para tempo real e porque roda o nosso `docker-compose.yml` sem mudança. Se você prefere outro serviço que usa no trabalho (ECS/Fargate, por exemplo), é só trocar.
+2. **Frase da experiência da equipe:** veja se está ok do jeito que ficou.
+3. **Recomendações de segurança:** autenticação e limite de requisições estão como "numa evolução", porque a API hoje não tem nenhum dos dois.
+4. Se a gente chegar a subir na AWS, a seção muda de "proposta" para "implantado".
+
+---
