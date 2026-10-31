@@ -318,7 +318,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 
 - [x] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas) — `src/medical_triage/infra/api/metrics.py` (`http_requests_total`, `http_request_duration_seconds`), exposto em `/metrics`
 - [x] `docker-compose.yml` com API + Prometheus + Grafana
-- [x] Dashboard Grafana configurado e exibindo as métricas
+- [x] Dashboard Grafana configurado e exibindo as métricas — JSON do dashboard: [`monitoring/grafana/provisioning/dashboards/medical-triage.json`](monitoring/grafana/provisioning/dashboards/medical-triage.json)
 
 ### Etapa 4 — Otimização de Latência e Entrega
 
