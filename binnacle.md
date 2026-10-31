@@ -1033,6 +1033,22 @@ Ganho de 268x no p50 sobre o publicado (109x sobre `n_jobs=1`). O `.onnx` tem 13
 
 ---
 
+## 25/10/2026 - German
+
+### README no formato padrão e completo
+
+O README era só o checklist do Tech Challenge. Reescrevi no formato de um README de projeto, com o checklist mantido no fim (`30d09da`):
+
+- **Apresentação e arquitetura:** o problema, o que o projeto cobre, diagrama (Mermaid) e estrutura do repositório.
+- **Como rodar:** pré-requisitos, início rápido com Docker Compose (API + Prometheus + Grafana), API sem Docker, dataset (download público ou `dvc pull`), treino, Airflow e testes.
+- **Resultados:** métricas do modelo, latência scikit-learn vs. ONNX e números do monitoramento.
+- **Decisão de arquitetura em nuvem:** seção criada, com o "tempo real, não batch" já decidido e o provedor a completar.
+- **Documentação e Equipe.**
+
+Depois, pelo GitHub (`eccfed0`, `d2d43f5`), troquei a coluna "Responsável por" da tabela da equipe por "E-Mail".
+
+---
+
 ## 31/10/2026 - German
 
 ### Decisão de arquitetura em nuvem (Etapa 1)
