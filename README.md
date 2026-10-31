@@ -51,6 +51,7 @@ flowchart LR
 ├── docs/                        # resultados e evidências
 ├── Dockerfile                   # imagem da API
 ├── docker-compose.yml           # API + Prometheus + Grafana
+├── Makefile                     # atalhos para os comandos deste README
 ├── pyproject.toml / uv.lock     # dependências (uv)
 └── binnacle.md                  # diário de bordo do desenvolvimento
 ```
@@ -62,6 +63,28 @@ flowchart LR
 | [Docker](https://docs.docker.com/get-docker/) com Docker Compose | API, monitoramento e Airflow. No Windows: Docker Desktop com WSL2 |
 | [uv](https://docs.astral.sh/uv/getting-started/installation/) | Treino, testes e rodar a API sem Docker. Instala o Python 3.12 sozinho |
 | Git | Clonar o repositório. No Windows, o Git Bash roda os scripts `.sh` |
+| `make` (opcional) | Atalhos do [`Makefile`](#atalhos-com-make). Já vem no Mac (com as Xcode Command Line Tools) e no Linux. No Windows não vem instalado: use os comandos completos de cada seção |
+
+## Atalhos com make
+
+O `Makefile` na raiz só encurta os comandos deste README. Cada seção abaixo continua mostrando o comando completo, que é o caminho no Windows e mostra o que cada etapa faz. Rode `make` para ver a lista.
+
+| Atalho | Comando completo | Seção |
+| --- | --- | --- |
+| `make install` | `uv sync --group dev --group training` | [Treino](#treino) |
+| `make data` | baixa os 3 CSVs do repositório público para `data/raw/` (pula os que já existem) | [Dataset](#dataset) |
+| `make train` | `uv run python -m training.pipeline` (baixa os CSVs antes, se faltarem) | [Treino](#treino) |
+| `make export-onnx` | `uv run python -m training.export_onnx` | [Treino](#treino) |
+| `make benchmark` | `uv run python -m training.benchmark_onnx` | [Treino](#treino) |
+| `make test` | `uv run pytest` | [Testes e qualidade](#testes-e-qualidade) |
+| `make cov` | `uv run pytest --cov=training --cov=src/medical_triage --cov-report=term-missing` | [Testes e qualidade](#testes-e-qualidade) |
+| `make lint` | `uv run ruff check .` e `uv run ruff format --check .` (o mesmo que o CI roda) | [Testes e qualidade](#testes-e-qualidade) |
+| `make format` | `uv run ruff check --fix .` e `uv run ruff format .` | [Testes e qualidade](#testes-e-qualidade) |
+| `make up` / `make down` | `docker compose up -d --build` / `docker compose down` | [Início rápido](#início-rápido-api--monitoramento) |
+| `make smoke` / `make load` | `./scripts/smoke_test.sh` / `./scripts/load_test.sh` | [Início rápido](#início-rápido-api--monitoramento) |
+| `make airflow-up` | cria o `airflow/.env` (Mac/Linux), `docker compose up airflow-init` e `docker compose up -d` em `airflow/` | [Treino orquestrado com Airflow](#treino-orquestrado-com-airflow) |
+| `make airflow-down` | `docker compose down` em `airflow/` | [Treino orquestrado com Airflow](#treino-orquestrado-com-airflow) |
+| `make demo` | `make train`, `make up` e `make smoke` em sequência | — |
 
 ## Início rápido: API + monitoramento
 
@@ -104,6 +127,17 @@ Para o dashboard ter dados, gere tráfego (no Windows, pelo Git Bash):
 
 Para desligar: `docker compose down` (o `down -v` também apaga os dados do Prometheus e do Grafana).
 
+### Dashboard do Grafana
+
+O dashboard **Medical Triage API** fica na pasta **Medical Triage** do Grafana. Ele é criado sozinho na subida (provisioning), a partir de [`monitoring/grafana/provisioning/dashboards/medical-triage.json`](monitoring/grafana/provisioning/dashboards/medical-triage.json), junto com o datasource do Prometheus. Volta igual mesmo depois de um `docker compose down -v`.
+
+A interface do Grafana não salva alterações por cima dele (`allowUiUpdates: false`): o dashboard é código. Para alterar:
+
+1. Edite o dashboard na interface.
+2. **Export → Export as code**, formato **Classic**, com "Export externally" desligado.
+3. Substitua o `medical-triage.json` pelo JSON exportado. O Grafana relê a pasta em ~10 s, sem reiniciar.
+4. Abra um PR com o JSON. Alteração feita só na interface se perde.
+
 ### Rodar só a API, sem Docker
 
 ```bash
@@ -133,7 +167,30 @@ foreach ($f in "medical_tc_train.csv", "medical_tc_test.csv", "medical_tc_labels
 }
 ```
 
-Quem tem acesso ao remote: `uv run dvc pull`.
+### DVC (só para a equipe)
+
+O remote `gdrive_storage` é uma pasta privada no Google Drive. O Google bloqueia o login padrão do DVC, então a equipe usa um cliente OAuth próprio (Google Cloud, tipo **App de escritorio**, em modo teste, com os integrantes como usuários de teste). Cada um grava as credenciais na própria máquina, em `.dvc/config.local`, que não vai para o Git:
+
+```bash
+uv sync --group dev --group training
+uv run dvc remote modify --local gdrive_storage gdrive_client_id "<id>"
+uv run dvc remote modify --local gdrive_storage gdrive_client_secret "<secret>"
+uv run dvc pull
+```
+
+No primeiro `dvc pull` abre o login do Google no navegador. O aviso "Google não verificou este app" é esperado (**Avançado → Acessar**). Como o app está em modo teste, o login expira a cada 7 dias.
+
+Para alterar o dataset, siga esta ordem. Sem o `dvc push`, quem receber o novo `.dvc` não consegue fazer `dvc pull`:
+
+```bash
+uv run dvc add data/raw/<arquivo>.csv
+git add data/raw/<arquivo>.csv.dvc
+git commit -m "data: ..."
+uv run dvc push
+git push
+```
+
+No Drive, o DVC guarda os arquivos por hash, não pelo nome. Não mexa neles direto por lá.
 
 ## Treino
 
@@ -191,7 +248,16 @@ uv run ruff format --check .     # formatação
 uv run pytest --cov=training --cov=src/medical_triage --cov-report=term-missing   # cobertura
 ```
 
-O CI (`.github/workflows/ci.yaml`) roda a cada push na `develop`/`main` e em todo PR. Ele faz lint, formatação e testes, e depois o build da imagem Docker com smoke test.
+O CI (`.github/workflows/ci.yaml`) roda a cada push na `develop`/`main` e em todo PR, com dois jobs **em paralelo**, porque respondem perguntas diferentes:
+
+| Job | O que faz |
+| --- | --- |
+| Checagem dos testes (`tests`) | `uv sync --group dev --group training` → `ruff check .` → `ruff format --check .` → `pytest` |
+| Build da imagem Docker (`build`) | `docker build` → sobe o container → `scripts/smoke_test.sh` (mostra os logs do container se falhar) |
+
+No CI, os 2 testes que usam o dataset real são pulados: os CSVs ficam no DVC, fora do Git. O que eles cobrem também é testado com dados sintéticos.
+
+O job `build` só **verifica** que a imagem sobe e responde; não publica a imagem em nenhum registry. O CD fica como [evolução planejada](#evolução-planejada).
 
 ## Resultados
 
@@ -268,6 +334,16 @@ flowchart LR
 - **Custo:** tempo real significa custo constante, com a instância ligada 24 horas por dia. É o preço aceito pela resposta imediata, e por isso a instância deve ser pequena e os ambientes de teste, desligados quando ociosos.
 - **Segurança:** laudos são dados sensíveis. Proposta: HTTPS na API, criptografia dos volumes, permissões com menor privilégio (a instância só pode baixar imagens do ECR), Prometheus e Grafana fechados ao acesso público e, numa evolução, autenticação e limite de requisições na API contra abuso e extração do modelo.
 
+## Evolução planejada
+
+Itens decididos pela equipe, mas fora do escopo desta entrega:
+
+- **CD:** build e push da imagem da API para um registry (ECR) e deploy automático, seguindo a [arquitetura proposta](#arquitetura-proposta). Hoje o job `build` do CI só verifica a imagem.
+- **Servir o ONNX na API:** o `.onnx` já é publicado em `models/` junto com o `.joblib`. Falta um adaptador em `src/medical_triage/infra/ml/` que carregue o `.onnx`, mover o `onnxruntime` para as dependências de produção e criar faixas abaixo de 1 ms nos buckets do histograma de latência.
+- **Modelo no DVC em vez do Git:** cada retreino acrescenta um binário de ~22,5 MB ao histórico do Git. A mudança exige ajustar o `COPY models/` do `Dockerfile` e o CI.
+- **Segurança:** senha do Grafana por variável de ambiente (hoje é `admin`/`admin`), autenticação e limite de requisições na API.
+- **Proteção das branches** `develop` e `main`: exigir PR e os dois checks do CI.
+
 ## Documentação
 
 - [`binnacle.md`](binnacle.md): diário de bordo, com as decisões técnicas por data e por autor.
@@ -289,7 +365,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 - [x] Modelo de classificação de texto (NLP): TF-IDF + Random Forest (`training/`, `models/random_forest_pipeline.joblib`)
 - [x] API REST com FastAPI (`src/medical_triage/`)
 - [x] Dockerfile funcional para o serviço de inferência
-- [x] Pipeline CI/CD básico com GitHub Actions (lint → test → build) (`.github/workflows/ci.yaml`); CD fica fora do escopo
+- [x] Pipeline CI/CD básico com GitHub Actions (lint → test → build) (`.github/workflows/ci.yaml`); CD fica como [evolução planejada](#evolução-planejada)
 - [x] Script ou DAG Airflow simples para pipeline de treino/retreino (`airflow/dags/training_dag.py`)
 - [x] Stack de monitoramento local: API + Prometheus + Grafana via Docker Compose
 - [x] Histórico de commits semântico e organizado

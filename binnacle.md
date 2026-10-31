@@ -1075,4 +1075,23 @@ A seção era tua, então revisa e muda o que não concordar:
 3. **Recomendações de segurança:** autenticação e limite de requisições estão como "numa evolução", porque a API hoje não tem nenhum dos dois.
 4. Se a gente chegar a subir na AWS, a seção muda de "proposta" para "implantado".
 
+### Makefile e ajustes no README
+
+**`Makefile` na raiz** (a Fase 2 tinha, a 3 não). Só encurta os comandos que já estão no README: `install`, `data`, `train`, `export-onnx`, `benchmark`, `test`, `cov`, `lint`, `format`, `up`, `down`, `smoke`, `load`, `airflow-up`, `airflow-down` e `demo` (treina, sobe a API e roda o smoke test). `make` sozinho lista tudo.
+
+- `data` só baixa os CSVs que faltam em `data/raw/`, do repositório público. Testei numa pasta vazia: os MD5 batem com os `.dvc`. Quem já fez `dvc pull` não baixa de novo. O `train`, o `benchmark` e o `airflow-up` chamam o `data` antes.
+- `airflow-up` cria o `airflow/.env` com o `AIRFLOW_UID` no Mac/Linux e pula isso no Windows.
+- O Windows não tem `make`, então o README continua com todos os comandos completos (bash e PowerShell). A seção nova **Atalhos com make** só mostra a equivalência entre cada atalho e o comando.
+
+**Correções no README**, depois de reler o binnacle inteiro:
+
+1. **CI:** o README dizia que o build rodava "depois" dos testes. Na verdade são dois jobs em paralelo, sem `needs` (entrada do Fé de 04/10). Coloquei a tabela dos jobs.
+2. **Evolução planejada** (seção nova): CD (push no registry + deploy), servir o ONNX na API, `.joblib` no DVC, senha do Grafana por `.env`, autenticação e limite de requisições, proteção de branch. O checklist agora aponta pra ela no item do CD.
+3. **DVC:** o README só dizia `uv run dvc pull`. Agora tem o cliente OAuth em `.dvc/config.local`, o login que expira a cada 7 dias e a ordem pra alterar dado (`dvc add` → commit do `.dvc` → `dvc push` → `git push`).
+4. **Dashboard do Grafana:** pasta **Medical Triage**, provisionado, e o fluxo de alteração (Export as code → substituir o JSON → PR). O caminho certo do JSON é `monitoring/grafana/provisioning/dashboards/medical-triage.json`; o `monitoring/grafana/dashboards/` da entrada de 18/10 mudou depois.
+
+### Pro Fellipe
+
+Os itens da **Evolução planejada** saíram das tuas entradas (04/10 e 18/10) e da pendência do ONNX na API. Se algo não for mais plano, é só tirar.
+
 ---
