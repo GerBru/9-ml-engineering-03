@@ -1137,6 +1137,22 @@ O `COPY models/ models/` mandava a pasta inteira para a imagem: o `.joblib` serv
 
 O `classifier.joblib` continua versionado no Git; só parou de ir para a imagem.
 
+### Decisão de arquitetura em nuvem: respondi o teu "Pro Fellipe"
+
+Revisei a seção que tu escreveu em 31/10 e respondi os quatro pontos:
+
+1. **EC2 ou Fargate:** fico com **EC2**, mas troquei a justificativa. O motivo forte não é a Aula 03 nem experiência: é **paridade** — o que sobe é exatamente o `docker-compose.yml` que a gente validou, com API, Prometheus e Grafana juntos. O Fargate virou um "descartado por ora" explícito, com o motivo (quebraria a paridade: Prometheus e Grafana viram tasks separadas com service discovery) e a condição para voltar (quando a observabilidade sair do compose). Preferi isso a só não citar o serviço, porque na Fase 1 a gente entregou em Fargate e alguém pode perguntar.
+2. **Frase da experiência da equipe:** mantida, mas limitada ao **provedor**. Explicitei o que a experiência compra (IAM, rede, previsibilidade de custo) e tirei dela o peso sobre a escolha do serviço, que agora se justifica sozinha.
+3. **Segurança como "numa evolução":** concordo, não mexi. Declarar o que falta é melhor do que omitir.
+4. **"Proposta" → "implantado":** não se aplica, não vamos subir. Fica "proposta".
+
+Mais dois reforços meus, nenhum pedido por tu:
+
+- **O argumento anti-serverless estava circular.** Dizia, no fundo, "serverless não serve porque o nosso Prometheus não funcionaria" — o que deixa a implementação ditar a arquitetura, e qualquer um responde "usa Pushgateway". Reescrevi reconhecendo as saídas (Pushgateway, CloudWatch, Managed Prometheus; *provisioned concurrency* para o cold start) e explicando por que mesmo assim não compensam: a primeira troca a stack de observabilidade da entrega por outra sem ganho, e a segunda apaga a economia que motiva o serverless.
+- **Ponto único de falha.** A seção falava de escala e não de disponibilidade. Uma instância EC2 num hospital é ponto único de falha, e essa é a pergunta óbvia numa banca. Acrescentei o reconhecimento (aceitável para piloto, não para regime) e o passo seguinte: duas instâncias em AZs diferentes atrás de load balancer — o mesmo desenho que a seção já citava para escala.
+
+Deixei de fora, de propósito, a estimativa de custo em R$/mês com tipo de instância nomeado. Seria um reforço bom para a parte de FinOps, mas preciso tirar o número do AWS Pricing Calculator para `sa-east-1` em vez de chutar.
+
 ### Pro German
 
 Nada do que mexi encosta em `training/`, `airflow/`, `monitoring/` ou `pyproject.toml` — a mudança é toda dentro de `src/medical_triage/`, mais uma linha do `Dockerfile` e os dois arquivos de documentação. O `CLASSIFIER_FILE` do `training/dag_tasks.py` é outro arquivo (staging em `data/processed/`) e não tem relação com o `models/classifier.joblib` que saiu da imagem.
