@@ -1,0 +1,32 @@
+tfidf:
+  max_features: 10000
+  ngram_range: [1, 1]
+  stop_words: "english"
+  min_df: 2
+
+model:
+  type: "RandomForestClassifier"
+  n_estimators: 289
+  max_depth: 28
+  min_samples_leaf: 3
+  class_weight: "balanced"
+  random_state: 42
+
+# Quality gate da DAG: o modelo só é publicado em models/ se o F1-macro no
+# conjunto de teste for >= este valor. O modelo atual faz 0.558.
+quality_gate:
+  min_f1_macro: 0.50
+
+# Exportação para ONNX: o .onnx só é publicado se as predições dele baterem com
+# as do scikit-learn em pelo menos esta fração do conjunto de teste. Não exijo
+# 1.0 porque o ONNX calcula em float32, e em casos de empate isso pode virar a
+# classe. O modelo atual bate 100%.
+onnx:
+  min_parity: 0.99
+
+output:
+  vectorizer_filename: "tfidf_vectorizer.joblib"
+  classifier_filename: "random_forest_classifier.joblib"
+  pipeline_filename: "random_forest_pipeline.joblib"
+  onnx_filename: "random_forest_pipeline.onnx"
+  metrics_filename: "random_forest_metrics.json"

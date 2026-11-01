@@ -1,0 +1,66 @@
+[project]
+name = "medical-triage"
+version = "0.1.0"
+description = "Deploy de Modelo em Produção com Pipeline CI/CD, Monitoramento e Otimização de Latência."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141.1",
+    "joblib>=1.6.0",
+    "prometheus-client>=0.26.0",
+    "scikit-learn==1.9.0",
+    "uvicorn>=0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.12.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.16.5",
+]
+training = [
+    "dvc[gdrive]",
+    "onnxruntime>=1.30.0",
+    "pandas>=3.0.5",
+    "pyopenssl>=25.0.0",
+    "pyyaml>=6.0",
+    "skl2onnx>=1.20.0",
+]
+
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+    "sys_platform == 'win32'",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/medical_triage"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+# Só procura testes em tests/: sem isso o pytest varre o projeto inteiro e, no
+# Windows, quebra no atalho Linux que o Airflow cria em airflow/logs/.
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["training", "src/medical_triage"]
+omit = ["*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+# E = erros de estilo (espaços, indentação)
+# F = pyflakes (import não usado, variável indefinida)
+# I = isort (ordem dos imports)
+# B = bugbear (armadilhas comuns)

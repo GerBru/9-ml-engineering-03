@@ -1,0 +1,38 @@
+services:
+  medical-triage:            
+    build: .                         # constrói a imagem a partir do Dockerfile da raiz
+    ports:
+      - "8000:8000"                  # HOST:CONTAINER, para você acessar da sua máquina
+    healthcheck:
+      # roda dentro do container; usa só a biblioteca padrão do Python (não precisa de curl).
+      # urlopen levanta exceção se o status for >= 400, e o container passa a unhealthy.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s              # tolerância enquanto o modelo é carregado no startup
+  
+  prometheus:                              
+    image: prom/prometheus:v3.5.0          # fixando versão
+    ports:
+      - "9090:9090"                        # interface web em http://localhost:9090
+    volumes:
+      # seu arquivo (host) -> caminho que a imagem lê (container), somente leitura
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus 
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.2.0         # fixando versão
+    ports:
+      - "3000:3000"                       # interface web em http://localhost:3000
+    depends_on:
+      - prometheus                        # só a ordem de subida (o Grafana precisa do Prometheus para ter dados)
+    volumes:
+      - grafana-data:/var/lib/grafana     # volume NOMEADO: guarda dashboards e configurações
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+  prometheus-data:

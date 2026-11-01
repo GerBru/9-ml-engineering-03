@@ -1,0 +1,12 @@
+# Quebras de linha: o repositório guarda tudo com LF e entrega LF em qualquer
+# máquina (Mac, Windows, CI), independente do core.autocrlf de cada uma.
+# Sem isso, o Git do Windows converte para CRLF e quebra os scripts .sh.
+* text=auto eol=lf
+
+# Binários: o Git nunca deve mexer no conteúdo.
+*.joblib binary
+*.onnx binary
+*.jpeg binary
+*.jpg binary
+*.png binary
+*.pdf binary

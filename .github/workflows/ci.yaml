@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+
+jobs:
+  tests: # identificador do job
+    name: Checagem dos testes
+    runs-on: ubuntu-24.04 # máquina Linux limpa fornecida pelo GitHub
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v5
+
+      - name: Instalar o uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Instalar depedências
+        run: uv sync --group dev --group training
+
+      - name: Checagem de lint
+        run: uv run ruff check .
+
+      - name: Checagem da formatação
+        run: uv run ruff format --check .
+
+      - name: Rodar testes
+        run: uv run pytest
+
+  build:
+    name: Build da imagem Docker
+    runs-on: ubuntu-24.04 # máquina Linux limpa fornecida pelo GitHub
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v5
+
+      - name: Criar imagem
+        run: docker build -t medical-triage .
+
+      - name: Subir container
+        run: docker run -d --name api -p 8000:8000 medical-triage
+
+      - name: Smoke test
+        run: bash scripts/smoke_test.sh http://localhost:8000
+
+      - name: Logs do container (só se falhou)
+        if: failure()
+        run: docker logs api
+
