@@ -21,8 +21,9 @@ RUN uv sync --frozen --no-dev
 
 # Copia o código-fonte e o modelo treinado
 # Ficam depois das dependências para não invalidar o cache de instalação
+# Só o .joblib que a API carrega: o .onnx e o baseline antigo não são servidos
 COPY src/ src/
-COPY models/ models/
+COPY models/random_forest_pipeline.joblib models/
 
 # Documenta que a aplicação escuta na porta 8000
 # Não abre a porta — o mapeamento real é feito no docker run com -p

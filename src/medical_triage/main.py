@@ -1,12 +1,14 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import joblib
 import uvicorn
 from fastapi import FastAPI
 
-from medical_triage.infra.api.metrics import metrics_middleware
-from medical_triage.infra.api.routes import router
-from medical_triage.infra.ml.sklearn_predictor import MODEL_PATH
+from medical_triage.api import router
+from medical_triage.metrics import metrics_middleware
+
+MODEL_PATH = Path("models/random_forest_pipeline.joblib")
 
 
 @asynccontextmanager
