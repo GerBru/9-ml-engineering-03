@@ -1158,3 +1158,54 @@ Deixei de fora, de propósito, a estimativa de custo em R$/mês com tipo de inst
 Nada do que mexi encosta em `training/`, `airflow/`, `monitoring/` ou `pyproject.toml` — a mudança é toda dentro de `src/medical_triage/`, mais uma linha do `Dockerfile` e os dois arquivos de documentação. O `CLASSIFIER_FILE` do `training/dag_tasks.py` é outro arquivo (staging em `data/processed/`) e não tem relação com o `models/classifier.joblib` que saiu da imagem.
 
 ---
+
+## 01/11/2026 - Fellipe (2)
+
+Preparando as telas para o vídeo, descobri que a DAG **não roda mais até o fim** no Docker. Regressão antiga, nunca percebida.
+
+### O sintoma
+
+`ingest_data`, `validate_data`, `train_model` e `evaluate_model` passam. O `deploy_model` falha nas três tentativas:
+
+```
+onnxruntime ... StringNormalizer::Locale:
+Failed to construct locale with name: en_US.UTF-8
+locale::facet::_S_create_c_locale name not valid:
+Please, install necessary language-pack-XX and configure locales
+```
+
+### A causa
+
+O `deploy_model` chama `pipeline.save_artifacts()`, que desde 19/10 faz o `check_parity` do ONNX — e isso abre uma `InferenceSession`. O grafo exportado pelo `skl2onnx` tem um nó `StringNormalizer` (o lowercase do TF-IDF) com o nome do locale **gravado dentro do grafo**. O ONNX Runtime exige exatamente aquele locale.
+
+A imagem `apache/airflow:2.10.4-python3.12` só traz `C`, `C.utf8` e `POSIX`. Não tem `en_US`. Não adianta setar `LANG` ou `LC_ALL`: o locale precisa existir no sistema.
+
+Fora do container funciona, porque no Mac o `en_US.UTF-8` existe. Foi por isso que ninguém viu.
+
+### Por que ninguém viu
+
+Olhando as datas, é uma regressão limpa:
+
+| Data | Commit | O quê |
+| --- | --- | --- |
+| 11/10 | `70e4256` | `docs/airflow_runs.jpeg`, a evidência da DAG verde |
+| 19/10 | `5dc9ffc` | ONNX e `check_parity` entram no `save_artifacts` |
+
+A DAG rodou verde **antes** do ONNX entrar no pipeline, e ninguém disparou de novo depois. A evidência que o README cita é 8 dias anterior à quebra. Quem clonasse o repositório hoje e rodasse a DAG veria `deploy_model` vermelho — e Orquestração vale 15% da nota.
+
+### A correção
+
+`airflow/Dockerfile`: instala o pacote `locales` e gera o `en_US.UTF-8` antes do `pip install`. Cinco linhas, num bloco `USER root` / `USER airflow`.
+
+Depois de `docker compose build` e `up -d`, confirmei `en_US.utf8` com `locale -a` dentro do container e disparei a DAG: **5 de 5 tasks verdes**.
+
+O modelo republicado tem exatamente as mesmas métricas do commitado (accuracy 0,5637 e F1-macro 0,5575), só muda nos bytes — as versões de biblioteca do container não são idênticas às do meu Mac. Restaurei os artefatos versionados com `git checkout -- models/` em vez de commitar os novos.
+
+### Pro German
+
+Dois pontos teus:
+
+1. A DAG recria `models/random_forest_classifier.joblib` e `models/tfidf_vectorizer.joblib` a cada execução — os "artefatos redundantes" da tua entrada de 19/10. Eles não estão no `.gitignore`, então aparecem como untracked depois de todo run. Vale ignorar, senão uma hora entram no Git de novo num `git add .`.
+2. O `check_parity` dentro do `save_artifacts` faz o deploy depender do ONNX Runtime. Funciona, mas acopla publicar o modelo a validar a exportação. Se um dia quisermos publicar sem ONNX, isso vira dois passos.
+
+---
