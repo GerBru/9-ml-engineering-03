@@ -27,7 +27,7 @@ flowchart LR
 ```
 
 - O treino (`training/`) pode rodar direto (`python -m training.pipeline`) ou orquestrado pela DAG do Airflow. Os dois publicam o modelo em `models/`.
-- A API (`src/medical_triage/`) carrega o modelo uma vez, no startup. Segue Clean Architecture: domínio, aplicação e infraestrutura (FastAPI e scikit-learn ficam na infraestrutura).
+- A API (`src/medical_triage/`) carrega o modelo uma vez, no startup, e o entrega às rotas por injeção de dependência do FastAPI. O pacote é plano, com um módulo por responsabilidade: `main.py` monta a aplicação, `api.py` tem as rotas, `schemas.py` o contrato de entrada e saída, `metrics.py` a instrumentação.
 - A API expõe métricas em `/metrics`. O Prometheus coleta a cada 15 s e o Grafana mostra o dashboard **Medical Triage API**.
 
 ### Estrutura do repositório
@@ -35,11 +35,10 @@ flowchart LR
 ```
 .
 ├── src/medical_triage/          # API
-│   ├── domain/                  #   entidades
-│   ├── application/             #   ports, use cases, exceptions
-│   ├── infra/api/               #   rotas FastAPI, schemas, métricas Prometheus
-│   ├── infra/ml/                #   carregamento do modelo
-│   └── main.py
+│   ├── main.py                  #   aplicação FastAPI e carga do modelo (lifespan)
+│   ├── api.py                   #   rotas /health, /predict e /metrics
+│   ├── schemas.py               #   contrato de entrada e saída (Pydantic)
+│   └── metrics.py               #   métricas Prometheus
 ├── training/                    # treino: ingest, validate, train, evaluate, pipeline,
 │                                #   tuning, export/benchmark ONNX, config.yaml
 ├── airflow/                     # Airflow local: DAG, Dockerfile, docker-compose.yaml
@@ -339,7 +338,7 @@ flowchart LR
 Itens decididos pela equipe, mas fora do escopo desta entrega:
 
 - **CD:** build e push da imagem da API para um registry (ECR) e deploy automático, seguindo a [arquitetura proposta](#arquitetura-proposta). Hoje o job `build` do CI só verifica a imagem.
-- **Servir o ONNX na API:** o `.onnx` já é publicado em `models/` junto com o `.joblib`. Falta um adaptador em `src/medical_triage/infra/ml/` que carregue o `.onnx`, mover o `onnxruntime` para as dependências de produção e criar faixas abaixo de 1 ms nos buckets do histograma de latência.
+- **Servir o ONNX na API:** o `.onnx` já é publicado em `models/` junto com o `.joblib`. Falta um módulo `predictor.py` em `src/medical_triage/` que carregue o `.onnx`, mover o `onnxruntime` para as dependências de produção, ajustar o `COPY` do modelo no `Dockerfile` e criar faixas abaixo de 1 ms nos buckets do histograma de latência.
 - **Modelo no DVC em vez do Git:** cada retreino acrescenta um binário de ~22,5 MB ao histórico do Git. A mudança exige ajustar o `COPY models/` do `Dockerfile` e o CI.
 - **Segurança:** senha do Grafana por variável de ambiente (hoje é `admin`/`admin`), autenticação e limite de requisições na API.
 - **Proteção das branches** `develop` e `main`: exigir PR e os dois checks do CI.
@@ -392,7 +391,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 
 ### Etapa 3 — Monitoramento e Observabilidade
 
-- [x] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas) — `src/medical_triage/infra/api/metrics.py` (`http_requests_total`, `http_request_duration_seconds`), exposto em `/metrics`
+- [x] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas) — `src/medical_triage/metrics.py` (`http_requests_total`, `http_request_duration_seconds`), exposto em `/metrics`
 - [x] `docker-compose.yml` com API + Prometheus + Grafana
 - [x] Dashboard Grafana configurado e exibindo as métricas — JSON do dashboard: [`monitoring/grafana/provisioning/dashboards/medical-triage.json`](monitoring/grafana/provisioning/dashboards/medical-triage.json)
 

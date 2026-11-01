@@ -1095,3 +1095,50 @@ A seção era tua, então revisa e muda o que não concordar:
 Os itens da **Evolução planejada** saíram das tuas entradas (04/10 e 18/10) e da pendência do ONNX na API. Se algo não for mais plano, é só tirar.
 
 ---
+
+## 01/11/2026 - Fellipe
+
+Revisitei a estrutura da API e desfiz a Clean Architecture que eu mesmo tinha adotado em 14/09.
+
+### Por que desfiz
+
+Reli o que estava no disco, não o que eu tinha documentado. Das 12 unidades do pacote, **5 arquivos estavam vazios** (`domain/entities.py`, `application/ports.py`, `application/use_cases.py` e os `__init__.py` das camadas). Todo o código vivo estava em `infra/`. Ou seja: as três camadas existiam como pastas, a "regra de dependência unidirecional" não tinha o que separar, e eu estava pagando o custo da arquitetura sem receber o benefício dela.
+
+Pior: o `infra/ml/sklearn_predictor.py` era **código morto**. Ele expunha `load_model()`/`predict()` sobre um global `_model`, mas o `main.py` só importava o `MODEL_PATH` dele e fazia o `joblib.load` por conta própria. Ninguém chamava as duas funções, e por consequência o `ModelNotLoadedError` nunca era levantado. Havia duas formas de carregar o modelo no repositório, e a que estava escrita no arquivo contradizia a decisão registrada aqui na entrada de 14/09 ("evita variável global e facilita teste").
+
+### O que ficou
+
+```
+src/medical_triage/
+├── __init__.py
+├── main.py      # aplicação, lifespan (joblib.load), MODEL_PATH, middleware
+├── api.py       # rotas /health, /predict, /metrics + a dependência get_model
+├── schemas.py   # PredictRequest, PredictResponse  (conteúdo intacto)
+└── metrics.py   # Counter, Histogram, middleware    (conteúdo intacto)
+```
+
+De 12 arquivos para 5. O critério de divisão deixou de ser "camada" e passou a ser responsabilidade: montar o app, borda HTTP, contrato, instrumentação. O `get_model` (13 linhas, uma função) foi absorvido pelo `api.py`, ao lado do `ModelDep` que já morava lá.
+
+**O que não mudou:** nada de comportamento. Mesmas rotas, mesmo JSON, mesmas métricas e labels, mesma carga única no `lifespan`, mesmo `app.state.model` com `Depends` e o 503, mesmo `medical_triage.main:app` no `Dockerfile`. Os testes de `tests/test_api.py` continuam valendo com **uma linha** alterada (o caminho do import do `get_model`), e foram a rede de segurança da mudança.
+
+Mantive o que de fato é boa prática e não depende de camadas: carga única no startup, injeção por dependência (que permite o `dependency_overrides` nos testes), 503 na dependência em vez de lógica de infraestrutura na rota, e os schemas Pydantic com exemplo no Swagger.
+
+### Por que o ONNX continua fora da API
+
+Cheguei a desenhar a troca do `.joblib` pelo `.onnx` na API e desisti depois de reler o enunciado. Os verbos dele são **exportar**, **comparar** e **demonstrar** ("Aplicação de pelo menos uma técnica", "Comparar a latência do modelo original versus o modelo otimizado", "melhoria de latência demonstrada"). Em nenhum ponto pede servir o modelo otimizado, e o "ex.: ONNX" aparece sempre como exemplo de técnica. Os três já estão cumpridos: exportação com paridade ≥ 99%, comparação em `docs/latency_benchmark.json` e tabela no README.
+
+Trocar o motor em cima do prazo exigiria mexer nas dependências de produção (tirar `scikit-learn` e `joblib`, pôr `onnxruntime` — que hoje nem entra na imagem, porque vive no grupo `training`), no `Dockerfile` e nos buckets do histograma. Risco sem necessidade. Segue na **Evolução planejada**.
+
+Anotação pra quando isso for feito: confirmei a assinatura do modelo exportado rodando o `models/random_forest_pipeline.onnx`. Entrada `text`, `tensor(string)`, formato `[None, 1]`. Saídas `label` (`tensor(string) [None]`) e **`probabilities`** (`tensor(float) [None, 5]`), essa segunda hoje sem uso — daria para devolver a confiança junto do rótulo. O `label[0]` já volta como `str` do Python, então vai direto pro Pydantic, sem conversão.
+
+### Dockerfile: só o modelo que a API serve
+
+O `COPY models/ models/` mandava a pasta inteira para a imagem: o `.joblib` servido (22,5 MB), o `.onnx` que a API não abre (13,8 MB), o `random_forest_metrics.json` e o `classifier.joblib` (o baseline sintético de 14/09, que ninguém mais carrega). Passou a ser `COPY models/random_forest_pipeline.joblib models/`. A pasta `models/` na imagem cai de ~36 MB para 22,5 MB.
+
+O `classifier.joblib` continua versionado no Git; só parou de ir para a imagem.
+
+### Pro German
+
+Nada do que mexi encosta em `training/`, `airflow/`, `monitoring/` ou `pyproject.toml` — a mudança é toda dentro de `src/medical_triage/`, mais uma linha do `Dockerfile` e os dois arquivos de documentação. O `CLASSIFIER_FILE` do `training/dag_tasks.py` é outro arquivo (staging em `data/processed/`) e não tem relação com o `models/classifier.joblib` que saiu da imagem.
+
+---
