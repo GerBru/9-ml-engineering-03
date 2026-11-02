@@ -33,3 +33,4 @@ airflow/logs/
 # Sistema operacional / IDE
 .DS_Store
 .idea/
+*.sw[nop]

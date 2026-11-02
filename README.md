@@ -27,7 +27,7 @@ flowchart LR
 ```
 
 - O treino (`training/`) pode rodar direto (`python -m training.pipeline`) ou orquestrado pela DAG do Airflow. Os dois publicam o modelo em `models/`.
-- A API (`src/medical_triage/`) carrega o modelo uma vez, no startup. Segue Clean Architecture: domínio, aplicação e infraestrutura (FastAPI e scikit-learn ficam na infraestrutura).
+- A API (`src/medical_triage/`) carrega o modelo uma vez, no startup, e o entrega às rotas por injeção de dependência do FastAPI. O pacote é plano, com um módulo por responsabilidade: `main.py` monta a aplicação, `api.py` tem as rotas, `schemas.py` o contrato de entrada e saída, `metrics.py` a instrumentação.
 - A API expõe métricas em `/metrics`. O Prometheus coleta a cada 15 s e o Grafana mostra o dashboard **Medical Triage API**.
 
 ### Estrutura do repositório
@@ -35,11 +35,10 @@ flowchart LR
 ```
 .
 ├── src/medical_triage/          # API
-│   ├── domain/                  #   entidades
-│   ├── application/             #   ports, use cases, exceptions
-│   ├── infra/api/               #   rotas FastAPI, schemas, métricas Prometheus
-│   ├── infra/ml/                #   carregamento do modelo
-│   └── main.py
+│   ├── main.py                  #   aplicação FastAPI e carga do modelo (lifespan)
+│   ├── api.py                   #   rotas /health, /predict e /metrics
+│   ├── schemas.py               #   contrato de entrada e saída (Pydantic)
+│   └── metrics.py               #   métricas Prometheus
 ├── training/                    # treino: ingest, validate, train, evaluate, pipeline,
 │                                #   tuning, export/benchmark ONNX, config.yaml
 ├── airflow/                     # Airflow local: DAG, Dockerfile, docker-compose.yaml
@@ -293,10 +292,10 @@ O batch entra só como complemento: reprocessar um lote histórico de laudos ou 
 
 ### Por que não serverless
 
-Um serviço serverless (ex.: AWS Lambda) cobra só pelo uso e escala sozinho, mas não se encaixa neste caso:
+Um serviço serverless (ex.: AWS Lambda) cobra só pelo uso e escala sozinho. Os dois primeiros obstáculos abaixo têm solução conhecida — o ponto é que nenhuma delas compensa aqui:
 
-- **Monitoramento:** o Prometheus coleta as métricas buscando o `/metrics` da API de tempos em tempos. Isso exige um processo que fique de pé. Numa função efêmera, os contadores e o histograma de latência ficam na memória de cada execução e se perdem, e a stack de monitoramento do projeto deixaria de funcionar como está.
-- **Cold start:** cada nova instância precisaria carregar o scikit-learn e um modelo de 22,5 MB antes de responder, o que torna a latência imprevisível justamente quando o sistema escala.
+- **Monitoramento:** o Prometheus coleta as métricas buscando o `/metrics` da API de tempos em tempos, o que exige um processo de pé. Numa função efêmera, os contadores e o histograma ficam na memória de cada execução e se perdem. Dá para contornar com métricas por *push* (Pushgateway) ou com um serviço gerenciado (CloudWatch, Amazon Managed Service for Prometheus), mas isso troca a stack de observabilidade que é parte desta entrega por outra, sem ganho no cenário.
+- **Cold start:** cada instância nova carrega o scikit-learn e um modelo de 22,5 MB antes de responder, o que torna a latência imprevisível justamente quando o sistema escala. O Lambda resolve isso com *provisioned concurrency* — só que pagar por instâncias sempre quentes apaga a economia que motiva o serverless. Vira um serviço sempre ativo, com mais limitações e menos controle.
 - **Perfil de demanda:** serverless compensa com demanda intermitente. Um hospital gera fluxo contínuo de laudos, e aí um serviço sempre ativo é o padrão indicado.
 
 ### Provedor: AWS
@@ -311,7 +310,7 @@ Os três provedores oferecem serviços equivalentes para o mesmo desenho:
 | Batch | AWS Batch | Container Apps Jobs | Cloud Run Jobs |
 | Plataforma gerenciada | SageMaker | Azure ML | Vertex AI |
 
-Para um modelo leve, só com CPU, nenhum dos três tem vantagem técnica decisiva. O critério de desempate foi a **experiência da equipe**: um dos integrantes trabalha com AWS no dia a dia, o que reduz o risco operacional e torna mais rápida e segura a configuração de permissões (IAM) e de rede.
+Para um modelo leve, só com CPU, nenhum dos três tem vantagem técnica decisiva — a escolha do provedor não é um problema de engenharia neste caso. O desempate foi a **experiência da equipe**: um dos integrantes trabalha com AWS no dia a dia, e o que isso compra é concreto — permissões (IAM) e rede configuradas sem tentativa e erro, e previsibilidade de custo. Ou seja, menos risco operacional. Esse critério decide o **provedor**; a escolha do serviço de execução tem justificativa própria, logo abaixo.
 
 ### Arquitetura proposta
 
@@ -323,11 +322,14 @@ flowchart LR
 ```
 
 - **Amazon ECR** guarda a imagem da API, gerada pelo mesmo `Dockerfile` que o CI já constrói.
-- **Amazon EC2** roda a stack com o mesmo `docker-compose.yml` validado localmente. Uma instância pequena, só com CPU, basta: no teste de carga, um processo atendeu ~70 req/s, e o `/predict` é limitado por CPU.
+- **Amazon EC2** roda a stack com o mesmo `docker-compose.yml` validado localmente. O critério é **paridade**: o que sobe para produção é exatamente o que foi testado — API, Prometheus e Grafana na mesma composição —, e é o único serviço de tempo real da AWS em que isso vale sem reescrever nada. Uma instância pequena, só com CPU, basta: no teste de carga, um processo atendeu ~70 req/s, e o `/predict` é limitado por CPU.
 - **Região `sa-east-1` (São Paulo)**, pela proximidade do hospital e por se tratar de dados de saúde, que a LGPD classifica como sensíveis.
+- **Descartado por ora: ECS Fargate.** Roda containers sem gerenciar servidor nem sistema operacional, e seria a escolha natural se o monitoramento já fosse gerenciado. Hoje ele quebraria a paridade acima: Prometheus e Grafana virariam tasks separadas, com service discovery — trabalho que não altera nada do que está sendo entregue. É o passo seguinte, quando a observabilidade sair do `docker-compose.yml`.
 - **Descartado: endpoint do SageMaker.** Ele traz escalonamento gerenciado, mas acrescenta custo e complexidade desproporcionais para um modelo scikit-learn de 22,5 MB, e exigiria adaptar o monitoramento.
 
 **Se a demanda crescer:** mais workers do uvicorn por instância, uma instância maior ou várias instâncias atrás de um load balancer. Servir o modelo em ONNX (0,05 ms por inferência, contra 13,5 ms no scikit-learn) também tira o modelo da posição de gargalo.
+
+**Disponibilidade:** a proposta é de **instância única** — se ela cair, a triagem para. Isso é aceitável para um piloto, não para um hospital em regime. O passo seguinte é duas instâncias em zonas de disponibilidade diferentes atrás de um load balancer, que é o mesmo desenho citado acima para escala: resolve capacidade e tolerância a falha de uma vez.
 
 ### Custo e segurança
 
@@ -339,7 +341,7 @@ flowchart LR
 Itens decididos pela equipe, mas fora do escopo desta entrega:
 
 - **CD:** build e push da imagem da API para um registry (ECR) e deploy automático, seguindo a [arquitetura proposta](#arquitetura-proposta). Hoje o job `build` do CI só verifica a imagem.
-- **Servir o ONNX na API:** o `.onnx` já é publicado em `models/` junto com o `.joblib`. Falta um adaptador em `src/medical_triage/infra/ml/` que carregue o `.onnx`, mover o `onnxruntime` para as dependências de produção e criar faixas abaixo de 1 ms nos buckets do histograma de latência.
+- **Servir o ONNX na API:** o `.onnx` já é publicado em `models/` junto com o `.joblib`. Falta um módulo `predictor.py` em `src/medical_triage/` que carregue o `.onnx`, mover o `onnxruntime` para as dependências de produção, ajustar o `COPY` do modelo no `Dockerfile` e criar faixas abaixo de 1 ms nos buckets do histograma de latência.
 - **Modelo no DVC em vez do Git:** cada retreino acrescenta um binário de ~22,5 MB ao histórico do Git. A mudança exige ajustar o `COPY models/` do `Dockerfile` e o CI.
 - **Segurança:** senha do Grafana por variável de ambiente (hoje é `admin`/`admin`), autenticação e limite de requisições na API.
 - **Proteção das branches** `develop` e `main`: exigir PR e os dois checks do CI.
@@ -392,7 +394,7 @@ Baseado nos requisitos de `docs/Tech Challenge Fase 03.pdf`.
 
 ### Etapa 3 — Monitoramento e Observabilidade
 
-- [x] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas) — `src/medical_triage/infra/api/metrics.py` (`http_requests_total`, `http_request_duration_seconds`), exposto em `/metrics`
+- [x] API instrumentada com `prometheus_client` (tempo de requisição, contagem de chamadas) — `src/medical_triage/metrics.py` (`http_requests_total`, `http_request_duration_seconds`), exposto em `/metrics`
 - [x] `docker-compose.yml` com API + Prometheus + Grafana
 - [x] Dashboard Grafana configurado e exibindo as métricas — JSON do dashboard: [`monitoring/grafana/provisioning/dashboards/medical-triage.json`](monitoring/grafana/provisioning/dashboards/medical-triage.json)
 

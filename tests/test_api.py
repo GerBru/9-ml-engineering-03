@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from medical_triage.infra.api.dependencies import get_model
+from medical_triage.api import get_model
 from medical_triage.main import app
 
 
